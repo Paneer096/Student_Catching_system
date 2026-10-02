@@ -1,4 +1,4 @@
-# Makerove (EduGraph) — Classroom Intelligence Platform
+# Makerove (Makerov) — Classroom Intelligence Platform
 
 > *"A teacher's sixth sense — support before sanction."*
 
