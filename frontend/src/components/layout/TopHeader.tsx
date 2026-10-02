@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface TopHeaderProps {
-  currentUser: {
+  currentUser?: {
     name: string;
     role: string;
     roleKey: string;
@@ -19,7 +19,6 @@ export interface TopHeaderProps {
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
-  currentUser,
   activeSection,
   onSectionChange,
   searchQuery,
@@ -121,21 +120,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full ring-2 ring-surface-container-lowest" />
           )}
         </button>
-
-        {/* User Persona Profile */}
-        <div className="flex items-center gap-2.5 pl-2.5 border-l border-outline-variant/70">
-          <div className="text-right hidden sm:block">
-            <div className="text-xs font-bold text-on-surface leading-tight font-sans">
-              {currentUser.name}
-            </div>
-            <div className="text-[10px] font-mono text-on-surface-variant/80 leading-tight">
-              {currentUser.role}
-            </div>
-          </div>
-          <div className="w-7 h-7 rounded-lg bg-surface-container-high border border-outline-variant text-on-surface font-bold text-xs flex items-center justify-center shadow-2xs font-mono">
-            {currentUser.name.slice(0, 1)}
-          </div>
-        </div>
       </div>
     </header>
   );
