@@ -11,8 +11,6 @@ export interface SideNavBarProps {
   };
   onRoleClick: () => void;
   unreadAlertsCount?: number;
-  isDarkMode?: boolean;
-  onToggleTheme?: () => void;
 }
 
 export const SideNavBar: React.FC<SideNavBarProps> = ({
@@ -21,8 +19,6 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
   currentUser,
   onRoleClick,
   unreadAlertsCount = 4,
-  isDarkMode = false,
-  onToggleTheme,
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -117,31 +113,13 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
         })}
       </ul>
 
-      {/* Footer / Settings, Dark Mode & Live Status */}
-      <div className="mt-auto flex flex-col gap-1 border-t border-outline-variant pt-3">
-        {/* Dark Mode Toggle */}
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          className="flex items-center justify-between px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-high rounded-lg text-sm transition-colors cursor-pointer"
-          title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        >
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[18px]">
-              {isDarkMode ? 'light_mode' : 'dark_mode'}
-            </span>
-            <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
-          </div>
-          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">
-            {isDarkMode ? 'DARK' : 'LIGHT'}
-          </span>
-        </button>
-
+      {/* Footer / Settings & Minimal System Status */}
+      <div className="mt-auto flex flex-col gap-1 border-t border-outline-variant/60 pt-3">
         <button
           type="button"
           onClick={() => onViewChange('settings')}
-          className={`flex items-center gap-3 px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-high rounded-lg text-sm transition-colors cursor-pointer ${
-            activeView === 'settings' ? 'bg-surface-container font-medium text-primary' : ''
+          className={`flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            activeView === 'settings' ? 'bg-surface-container font-semibold text-primary' : ''
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">settings</span>
@@ -149,19 +127,22 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
         </button>
 
         <a
-          href="https://github.com"
+          href="https://github.com/Paneer096/Student_Catching_system"
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-3 px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-high rounded-lg text-sm transition-colors"
+          className="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high rounded-lg text-xs font-medium transition-colors"
         >
           <span className="material-symbols-outlined text-[18px]">help</span>
-          <span>Help &amp; Support</span>
+          <span>Documentation &amp; Help</span>
         </a>
 
-        {/* Status Pill matching Stitch reference */}
-        <div className="mt-2.5 px-3 flex items-center gap-2 text-on-tertiary-container text-xs font-medium bg-tertiary-fixed-dim/20 py-2 rounded-lg justify-center border border-tertiary-fixed">
-          <span className="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
-          <span>System Status: Active</span>
+        {/* Minimalist Status Badge */}
+        <div className="mt-2 px-3 py-2 flex items-center justify-between text-[11px] font-mono text-on-surface-variant bg-surface-container-low rounded-lg border border-outline-variant/50">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Engine Active</span>
+          </div>
+          <span className="text-[10px] text-on-surface-variant/60 font-medium">Ready</span>
         </div>
       </div>
     </nav>

@@ -58,3 +58,9 @@ makerove.db
 *.swo
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+backend/logs/
+

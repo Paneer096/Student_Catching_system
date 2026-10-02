@@ -144,8 +144,6 @@ export default function App() {
         currentUser={currentUser}
         onRoleClick={() => setShowRoleModal(true)}
         unreadAlertsCount={unreadAlertsCount}
-        isDarkMode={isDarkMode}
-        onToggleTheme={toggleTheme}
       />
 
       {/* Top Header & Main Canvas */}

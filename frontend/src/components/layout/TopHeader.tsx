@@ -33,31 +33,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   return (
     <header className="bg-surface-container-lowest/90 backdrop-blur-md h-[60px] fixed top-0 right-0 left-[260px] border-b border-outline-variant/70 shadow-2xs flex justify-between items-center px-5 z-20 text-xs">
-      {/* ─── Left: Brand & Cohort Breadcrumb ─────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        {/* Brand Mark & Live Status Badge */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-surface-container border border-outline-variant/80 flex items-center justify-center text-primary shadow-2xs">
-            <span className="material-symbols-outlined text-[17px] text-primary">hub</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-extrabold tracking-tight text-on-surface font-mono uppercase">
-              Makerov
-            </span>
-            <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-mono text-on-surface-variant/80 border-l border-outline-variant/60 pl-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Intelligence Platform</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Minimal Divider */}
-        <span className="text-outline-variant text-sm font-light select-none hidden sm:inline">/</span>
-
-        {/* Minimalist Cohort Selector */}
-        <div className="flex items-center gap-1.5 bg-surface-container-low/90 hover:bg-surface-container border border-outline-variant/80 px-2.5 py-1 rounded-lg transition-colors shadow-2xs">
-          <span className="material-symbols-outlined text-[14px] text-primary/70">school</span>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-medium">
+      {/* ─── Left: Cohort Context ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 bg-surface-container-low/90 hover:bg-surface-container border border-outline-variant/80 px-3 py-1.5 rounded-lg transition-colors shadow-2xs">
+          <span className="material-symbols-outlined text-[15px] text-primary">school</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-semibold">
             Cohort
           </span>
           <select
@@ -65,10 +45,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             onChange={(e) => onSectionChange(e.target.value)}
             className="bg-transparent text-xs font-bold text-on-surface font-mono focus:outline-none cursor-pointer pr-1"
           >
-            <option value="CS-3B">AIML Sem 4</option>
-            <option value="CS-3A">AIML Sem 4 (Sec A)</option>
-            <option value="ME-2A">ME Sem 4</option>
+            <option value="CS-3B">AIML Sem 4 (CS-3B)</option>
+            <option value="CS-3A">AIML Sem 4 (CS-3A)</option>
+            <option value="ME-2A">ME Sem 4 (ME-2A)</option>
           </select>
+        </div>
+
+        <div className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-mono text-on-surface-variant/70 px-2 py-1 rounded-md bg-surface-container-low/60 border border-outline-variant/40">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Live Sync</span>
         </div>
       </div>
 
