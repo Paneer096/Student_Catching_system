@@ -1,4 +1,4 @@
-# Makerove (Makerov) — Classroom Intelligence Platform
+# Makerov (Student-catching, Bunkpredictor, Class-Analyser) — Classroom Intelligence Platform
 
 > *"A teacher's sixth sense — support before sanction."*
 
