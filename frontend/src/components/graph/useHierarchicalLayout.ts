@@ -21,6 +21,7 @@ export interface LayoutOptions {
   showTeachers: boolean;
   showClubs: boolean;
   showSubjects?: boolean;
+  studentConnectivityMode?: boolean;
 }
 
 export function useHierarchicalLayout() {
@@ -46,6 +47,7 @@ export function useHierarchicalLayout() {
         layoutMode,
         showTeachers,
         showClubs,
+        studentConnectivityMode = false,
       } = options;
 
       const centerX = width / 2;
@@ -56,6 +58,122 @@ export function useHierarchicalLayout() {
       const clusterCentroids: Record<string, { x: number; y: number }> = {};
 
       if (!data || !data.section) {
+        return { nodes, edges, clusterCentroids };
+      }
+
+      // ─── 0. PURE STUDENT CONNECTIVITY GRAPH MODE ────────────────────────────
+      // If studentConnectivityMode is true, render ONLY students and their relational peer ties.
+      // Excludes Section, Teachers, Clubs, and Cluster centroid nodes.
+      if (studentConnectivityMode) {
+        const clusters = data.clusters || [];
+        const clusterCount = Math.max(1, clusters.length);
+
+        clusters.forEach((cl, idx) => {
+          let cx = centerX;
+          let cy = centerY;
+
+          if (layoutMode === 'Circular' || layoutMode === 'Radial') {
+            const angle = (2 * Math.PI * idx) / clusterCount - Math.PI / 2;
+            const radiusX = Math.min(width * 0.36, 290);
+            const radiusY = Math.min(height * 0.33, 175);
+            cx = centerX + Math.cos(angle) * radiusX;
+            cy = centerY + Math.sin(angle) * radiusY;
+          } else {
+            // Default 2-row grid distribution for clusters/pods
+            if (clusterCount <= 4) {
+              const spanX = Math.min(width * 0.75, (clusterCount - 1) * 220);
+              const startX = centerX - spanX / 2;
+              const stepX = clusterCount > 1 ? spanX / (clusterCount - 1) : 0;
+              cx = startX + idx * stepX;
+              cy = centerY + (idx % 2 === 1 ? -25 : 25);
+            } else {
+              const row1Count = Math.ceil(clusterCount / 2);
+              const row2Count = clusterCount - row1Count;
+              const isRow1 = idx < row1Count;
+              const rowIndex = isRow1 ? idx : idx - row1Count;
+              const countInThisRow = isRow1 ? row1Count : row2Count;
+
+              const spanX = Math.max(380, (countInThisRow - 1) * 250);
+              const startX = centerX - spanX / 2;
+              const stepX = countInThisRow > 1 ? spanX / (countInThisRow - 1) : 0;
+
+              cx = startX + rowIndex * stepX;
+              if (isRow1) {
+                cy = centerY - 110 + (rowIndex % 2 === 1 ? -15 : 10);
+              } else {
+                cy = centerY + 110 + (rowIndex % 2 === 1 ? 15 : -10);
+              }
+            }
+          }
+
+          clusterCentroids[cl.id] = { x: cx, y: cy };
+
+          const members = cl.members || [];
+          const memberCount = Math.max(1, members.length);
+          const orbitRadius = Math.min(68, Math.max(48, 30 + memberCount * 2.6));
+
+          // Sort members deterministically
+          const sortedMembers = [...members].sort(
+            (a, b) => (b.betweenness || 0) - (a.betweenness || 0) || a.roll_no.localeCompare(b.roll_no)
+          );
+
+          sortedMembers.forEach((st, sIdx) => {
+            const angle = (2 * Math.PI * sIdx) / memberCount - Math.PI / 2;
+            const sx = cx + Math.cos(angle) * orbitRadius;
+            const sy = cy + Math.sin(angle) * orbitRadius;
+
+            const colors = NodeRenderer.getNodeColor('student', st);
+            const radius = 13.5;
+
+            nodes.push({
+              id: st.id,
+              kind: 'student',
+              x: sx,
+              y: sy,
+              label: st.name,
+              subLabel: st.roll_no,
+              initials: NodeRenderer.getInitials(st.name),
+              radius,
+              color: colors.fill,
+              strokeColor: colors.stroke,
+              strokeWidth: 2,
+              opacity: 1,
+              isDelinquent: st.is_delinquent,
+              hasRiskBadge: st.classification === 'high_concern' || st.classification === 'at_risk',
+              clusterId: cl.id,
+              data: st,
+            });
+          });
+        });
+
+        // Student-to-Student Edges Only
+        const nodePosMap = new Map<string, { x: number; y: number }>();
+        nodes.forEach((n) => nodePosMap.set(n.id, { x: n.x, y: n.y }));
+
+        if (data.edges) {
+          data.edges.forEach((e, idx) => {
+            if (e.type === 'HIERARCHICAL') return;
+
+            const sPos = nodePosMap.get(e.source);
+            const tPos = nodePosMap.get(e.target);
+            if (!sPos || !tPos) return;
+
+            edges.push({
+              id: `edge-${idx}`,
+              source: e.source,
+              target: e.target,
+              sourceX: sPos.x,
+              sourceY: sPos.y,
+              targetX: tPos.x,
+              targetY: tPos.y,
+              type: e.type,
+              weight: e.weight,
+              color: e.color || (e.type === 'BUNKS_WITH' ? '#ef4444' : e.type === 'FRIENDS_WITH' ? '#4ade80' : '#3b82f6'),
+              label: e.label,
+            });
+          });
+        }
+
         return { nodes, edges, clusterCentroids };
       }
 

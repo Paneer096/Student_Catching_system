@@ -39,16 +39,34 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [dossierLoading, setDossierLoading] = useState<boolean>(false);
 
   // Toolbar & Visualization Controls
+  const [graphMode, setGraphMode] = useState<'hierarchy' | 'connectivity'>('hierarchy');
   const [zoomScale, setZoomScale] = useState<number>(1.0);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('Hierarchical');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [delinquentsOnly, setDelinquentsOnly] = useState<boolean>(false);
-  const [studentConnectivityEnabled, setStudentConnectivityEnabled] = useState<boolean>(false);
 
   // Edge Type Filter: Rule 1: By default ONLY Hierarchical and Aggregates are shown!
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeTypeKey>>(
     new Set(['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER'])
   );
+
+  // Switch between Classroom Hierarchy and pure Student Connectivity Graph
+  const handleSwitchGraphMode = (mode: 'hierarchy' | 'connectivity') => {
+    setGraphMode(mode);
+    setSelectedNode(null);
+    setDossier(null);
+    if (mode === 'connectivity') {
+      setActiveLayer(3);
+      setExpandedClusterId(null);
+      // Automatically enable student-to-student relational ties
+      setEnabledEdgeTypes(new Set(['FRIENDS_WITH', 'BUNKS_WITH', 'STUDIES_WITH']));
+    } else {
+      setActiveLayer(1);
+      setExpandedClusterId(null);
+      // Restore default hierarchical edge types
+      setEnabledEdgeTypes(new Set(['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER']));
+    }
+  };
 
   // Fetch Hierarchical Graph Data from Backend
   const fetchGraphData = useCallback(async () => {
@@ -180,6 +198,36 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
   // Breadcrumb Segments Construction
   const breadcrumbSegments: BreadcrumbSegment[] = useMemo(() => {
+    if (graphMode === 'connectivity') {
+      const segs: BreadcrumbSegment[] = [
+        {
+          level: 1,
+          id: `sec-${activeSection}`,
+          label: `Section ${activeSection}`,
+          subLabel: 'Peer Network',
+        },
+        {
+          level: 2,
+          id: 'peer-network',
+          label: 'Student Connectivity Graph',
+          subLabel: `${data?.section?.student_count || 60} Students`,
+          color: '#3b82f6',
+        },
+      ];
+
+      if (selectedNode && selectedNode.kind === 'student') {
+        segs.push({
+          level: 3,
+          id: selectedNode.id,
+          label: selectedNode.label,
+          subLabel: selectedNode.subLabel,
+          color: selectedNode.color,
+        });
+      }
+
+      return segs;
+    }
+
     const segments: BreadcrumbSegment[] = [
       {
         level: 0,
@@ -218,10 +266,18 @@ export const GraphView: React.FC<GraphViewProps> = ({
     }
 
     return segments;
-  }, [data, activeSection, expandedClusterId, selectedNode]);
+  }, [data, activeSection, expandedClusterId, selectedNode, graphMode]);
 
   // Handle Clicking on Breadcrumb Segment
   const handleSelectBreadcrumb = (level: number, id: string) => {
+    if (graphMode === 'connectivity') {
+      if (level <= 2) {
+        setSelectedNode(null);
+        setDossier(null);
+      }
+      return;
+    }
+
     if (level === 0) {
       setActiveLayer(0);
       setExpandedClusterId(null);
@@ -240,6 +296,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
   };
 
   const handleStepBack = () => {
+    if (graphMode === 'connectivity') {
+      setSelectedNode(null);
+      setDossier(null);
+      return;
+    }
+
     if (activeLayer === 3) {
       setActiveLayer(expandedClusterId ? 2 : 1);
       setSelectedNode(null);
@@ -395,27 +457,41 @@ export const GraphView: React.FC<GraphViewProps> = ({
             </button>
           )}
 
-          {/* Student Connectivity Option */}
-          <button
-            onClick={() => setStudentConnectivityEnabled(!studentConnectivityEnabled)}
-            className={`inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer shadow-2xs ${
-              studentConnectivityEnabled
-                ? 'bg-primary text-on-primary border-primary shadow-primary/25'
-                : 'bg-surface-container-low text-on-surface-variant border-outline-variant/80 hover:text-on-surface hover:bg-surface-container'
-            }`}
-            title="Toggle Student Connectivity"
-          >
-            <span
-              className="material-symbols-outlined text-[15px]"
-              style={{ fontVariationSettings: studentConnectivityEnabled ? "'FILL' 1" : "'FILL' 0" }}
+          {/* Graph View Selector: Classroom Hierarchy vs Student Connectivity */}
+          <div className="flex items-center bg-surface-container-low border border-outline-variant/80 rounded-xl p-0.5 shadow-2xs font-mono">
+            <button
+              onClick={() => handleSwitchGraphMode('hierarchy')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                graphMode === 'hierarchy'
+                  ? 'bg-surface-container-highest text-primary font-bold shadow-2xs'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+              title="Classroom Institutional Hierarchy Graph"
             >
-              connect_without_contact
-            </span>
-            <span>Student Connectivity</span>
-            {studentConnectivityEnabled && (
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            )}
-          </button>
+              <span className="material-symbols-outlined text-[17px]">hub</span>
+              <span>Hierarchy</span>
+            </button>
+            <button
+              onClick={() => handleSwitchGraphMode('connectivity')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                graphMode === 'connectivity'
+                  ? 'bg-primary text-on-primary font-bold shadow-primary/25 shadow-2xs'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+              title="Separate Student Connectivity Network (Peer Ties Only)"
+            >
+              <span
+                className="material-symbols-outlined text-[17px]"
+                style={{ fontVariationSettings: graphMode === 'connectivity' ? "'FILL' 1" : "'FILL' 0" }}
+              >
+                connect_without_contact
+              </span>
+              <span>Student Connectivity</span>
+              {graphMode === 'connectivity' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Right: Controls & Search */}
@@ -484,6 +560,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             onToggleType={handleToggleEdgeType}
             onSetPreset={handleSetEdgePreset}
             edgeCounts={edgeTypeCounts}
+            isStudentConnectivityMode={graphMode === 'connectivity'}
           />
 
           {/* Zoom Controls Capsule */}
@@ -493,7 +570,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface-variant cursor-pointer transition-colors"
               title="Zoom out"
             >
-              <span className="material-symbols-outlined text-[15px]">remove</span>
+              <span className="material-symbols-outlined text-[17px]">remove</span>
             </button>
             <span className="text-[10px] px-1.5 select-none text-on-surface font-bold min-w-[42px] text-center">
               {Math.round(zoomScale * 100)}%
@@ -503,14 +580,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
               className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface-variant cursor-pointer transition-colors"
               title="Zoom in"
             >
-              <span className="material-symbols-outlined text-[15px]">add</span>
+              <span className="material-symbols-outlined text-[17px]">add</span>
             </button>
             <button
               onClick={() => setZoomScale(1.0)}
               className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors ml-0.5"
               title="Fit to Screen (100%)"
             >
-              <span className="material-symbols-outlined text-[14px]">fit_screen</span>
+              <span className="material-symbols-outlined text-[16px]">fit_screen</span>
             </button>
           </div>
 
@@ -520,7 +597,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             className="p-1.5 rounded-xl border border-outline-variant/80 bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer shadow-2xs"
             title="Export Graph Dossier JSON"
           >
-            <span className="material-symbols-outlined text-[17px]">download</span>
+            <span className="material-symbols-outlined text-[18px]">download</span>
           </button>
 
           {/* Refresh Computation */}
@@ -529,7 +606,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             className="p-1.5 rounded-xl border border-outline-variant/80 bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary transition-colors cursor-pointer shadow-2xs"
             title="Refresh Knowledge Graph"
           >
-            <span className="material-symbols-outlined text-[17px]">refresh</span>
+            <span className="material-symbols-outlined text-[18px]">refresh</span>
           </button>
         </div>
       </div>
@@ -549,7 +626,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             layoutMode={layoutMode}
             zoomScale={zoomScale}
             onZoomChange={setZoomScale}
-            studentConnectivityEnabled={studentConnectivityEnabled}
+            studentConnectivityEnabled={graphMode === 'connectivity'}
           />
         </div>
 
@@ -780,6 +857,55 @@ export const GraphView: React.FC<GraphViewProps> = ({
                 </button>
               </div>
             </div>
+          ) : graphMode === 'connectivity' ? (
+            /* Student Connectivity Network Overview Card */
+            <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4 text-xs font-sans">
+              <div className="border-b border-outline-variant/60 pb-3">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                  Peer Ties Network
+                </span>
+                <h3 className="text-sm font-bold text-on-surface mt-1.5 leading-snug">
+                  Student Connectivity Graph
+                </h3>
+                <p className="text-[11px] text-on-surface-variant font-mono mt-0.5">
+                  Section {activeSection} · {data.section?.student_count || 60} Students · 6 Pod Communities
+                </p>
+              </div>
+
+              {/* Peer Network Stats */}
+              <div className="p-3 bg-surface-container-low rounded-xl border border-outline-variant/60 space-y-2 font-mono">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-on-surface-variant">Active Students:</span>
+                  <span className="font-bold text-on-surface">{data.section?.student_count || 60}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-on-surface-variant">Friendship Edges:</span>
+                  <span className="font-bold text-emerald-500">{edgeTypeCounts['FRIENDS_WITH'] || 0}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-on-surface-variant">Mutual Absence (Bunks):</span>
+                  <span className="font-bold text-rose-500">{edgeTypeCounts['BUNKS_WITH'] || 0}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-on-surface-variant">Study Partner Edges:</span>
+                  <span className="font-bold text-blue-500">{edgeTypeCounts['STUDIES_WITH'] || 0}</span>
+                </div>
+              </div>
+
+              {/* Guidance for Student Connectivity */}
+              <div className="p-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/40 space-y-1.5 text-on-surface-variant text-[11px] leading-relaxed">
+                <div className="font-bold text-on-surface flex items-center gap-1.5 font-mono">
+                  <span className="material-symbols-outlined text-[17px] text-primary">connect_without_contact</span>
+                  <span>How to navigate:</span>
+                </div>
+                <ul className="space-y-1.5 pl-4 list-disc text-[10.5px]">
+                  <li>Click any <strong>Student Node</strong> to inspect their mutual bunking partners and friends.</li>
+                  <li>Click the student again or click canvas background to <strong>close / deselect</strong>.</li>
+                  <li>Use the <strong>Edges dropdown</strong> to toggle Friends, Bunks, or Study ties.</li>
+                  <li>Delinquent students display a <strong className="text-rose-500 font-bold">!</strong> warning badge.</li>
+                </ul>
+              </div>
+            </div>
           ) : (
             /* Default Section & Guidance Card */
             <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4 text-xs font-sans">
@@ -814,7 +940,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               {/* Guidance / Progressive Disclosure Instructions */}
               <div className="p-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/40 space-y-1.5 text-on-surface-variant text-[11px] leading-relaxed">
                 <div className="font-bold text-on-surface flex items-center gap-1.5 font-mono">
-                  <span className="material-symbols-outlined text-[15px] text-primary">info</span>
+                  <span className="material-symbols-outlined text-[16px] text-primary">info</span>
                   <span>How to navigate:</span>
                 </div>
                 <ul className="space-y-1 pl-4 list-disc text-[10.5px]">

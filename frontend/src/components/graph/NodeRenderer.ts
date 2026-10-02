@@ -44,22 +44,22 @@ export class NodeRenderer {
   static getNodeRadius(kind: NodeKind, data?: any): number {
     switch (kind) {
       case 'section':
-        return 32; // Compact anchor
+        return 36; // Spacious anchor for 26px icon
       case 'cluster': {
         const count = data?.member_count || data?.members?.length || 6;
-        return Math.max(22, Math.min(28, 18 + count * 0.7));
+        return Math.max(26, Math.min(32, 22 + count * 0.7));
       }
       case 'student': {
-        return 11; // Clean initials, excellent clearance
+        return 13; // Clean initials, excellent clearance
       }
       case 'teacher':
-        return 14;
+        return 20; // Room for 18px icon
       case 'club':
-        return 13;
+        return 18; // Room for 17px icon
       case 'subject':
-        return 11;
+        return 16; // Room for 15px icon
       default:
-        return 11;
+        return 13;
     }
   }
 

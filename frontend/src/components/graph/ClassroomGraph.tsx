@@ -65,7 +65,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
   }, []);
 
   // Compute Layout Positions
-  const { nodes, edges } = useMemo(() => {
+  const { nodes, edges, clusterCentroids } = useMemo(() => {
     return computeLayout(data, {
       width: dimensions.width,
       height: dimensions.height,
@@ -75,8 +75,17 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
       showTeachers: true,
       showClubs: true,
       showSubjects: true,
+      studentConnectivityMode: studentConnectivityEnabled,
     });
-  }, [data, dimensions, expandedClusterId, selectedNodeId, layoutMode, computeLayout]);
+  }, [
+    data,
+    dimensions,
+    expandedClusterId,
+    selectedNodeId,
+    layoutMode,
+    computeLayout,
+    studentConnectivityEnabled,
+  ]);
 
   // Compute Neighbors of the focused/hovered node
   const activeFocusId = hoveredNodeId || selectedNodeId;
@@ -285,6 +294,56 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
           transform={`translate(${panOffset.x}, ${panOffset.y}) translate(${dimensions.width / 2}, ${dimensions.height / 2}) scale(${zoomScale}) translate(${-dimensions.width / 2}, ${-dimensions.height / 2})`}
           style={{ transition: isDraggingRef.current ? 'none' : 'transform 0.1s ease-out' }}
         >
+          {/* ─── 0. Subtle Community Pod Hulls (Student Connectivity Mode Only) ─── */}
+          {studentConnectivityEnabled && (
+            <g className="pod-hulls-group pointer-events-none">
+              {Object.entries(clusterCentroids).map(([cid, pos]) => {
+                const cluster = data?.clusters?.find((c) => c.id === cid);
+                if (!cluster) return null;
+                const riskColor = cluster.risk_color || '#3b82f6';
+                return (
+                  <g key={`pod-hull-${cid}`} transform={`translate(${pos.x}, ${pos.y})`}>
+                    {/* Soft ambient aura circle */}
+                    <circle
+                      r={72}
+                      fill={riskColor}
+                      fillOpacity={0.035}
+                      stroke={riskColor}
+                      strokeOpacity={0.18}
+                      strokeWidth={1.2}
+                      strokeDasharray="4 3"
+                    />
+                    {/* Pill label for Community / Pod */}
+                    <g transform="translate(0, 0)">
+                      <rect
+                        x="-46"
+                        y="-9"
+                        width="92"
+                        height="18"
+                        rx="9"
+                        fill="#090d16"
+                        fillOpacity={0.8}
+                        stroke={riskColor}
+                        strokeOpacity={0.3}
+                        strokeWidth="0.8"
+                      />
+                      <text
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fill="#94a3b8"
+                        fontSize="8.5"
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        {cluster.name.split('(')[0].trim()}
+                      </text>
+                    </g>
+                  </g>
+                );
+              })}
+            </g>
+          )}
+
           {/* ─── 1. Curved Quadratic Bezier Edges ──────────────────────────────── */}
           <g className="edges-group">
           {visibleEdges.map((edge) => {
@@ -440,7 +499,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#f8fafc"
-                    fontSize="18"
+                    fontSize="26"
                     fontFamily="Material Symbols Outlined"
                     style={{ userSelect: 'none' }}
                   >
@@ -453,7 +512,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#f8fafc"
-                    fontSize={node.radius > 25 ? '16' : '14'}
+                    fontSize={node.radius > 27 ? '22' : '20'}
                     fontFamily="Material Symbols Outlined"
                     style={{ userSelect: 'none' }}
                   >
@@ -466,7 +525,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#93c5fd"
-                    fontSize="14"
+                    fontSize="18"
                     fontFamily="Material Symbols Outlined"
                     style={{ userSelect: 'none' }}
                   >
@@ -479,7 +538,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#f1f5f9"
-                    fontSize="13"
+                    fontSize="17"
                     fontFamily="Material Symbols Outlined"
                     style={{ userSelect: 'none' }}
                   >
@@ -492,7 +551,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#cbd5e1"
-                    fontSize="12"
+                    fontSize="15"
                     fontFamily="Material Symbols Outlined"
                     style={{ userSelect: 'none' }}
                   >
@@ -505,7 +564,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="#f8fafc"
-                    fontSize={node.radius > 11 ? '8.5' : '7.5'}
+                    fontSize={node.radius > 12 ? '9' : '8'}
                     fontFamily="monospace"
                     fontWeight="bold"
                     style={{ userSelect: 'none' }}
@@ -638,12 +697,12 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
       )}
 
       {/* Navigation Helper Indicator in Canvas Corner */}
-      <div className="absolute bottom-3 left-3 pointer-events-none text-[10px] font-mono text-on-surface-variant/70 bg-surface-container-lowest/80 px-2 py-1 rounded-md border border-outline-variant/40 flex items-center gap-2">
+      <div className="absolute bottom-3 left-3 pointer-events-none text-[10px] font-mono text-on-surface-variant/80 bg-surface-container-lowest/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-outline-variant/60 flex items-center gap-2 shadow-xs">
         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
         <span>
           {studentConnectivityEnabled
-            ? 'Student Connectivity Mode: Enabled'
-            : 'Drag to pan · Scroll to zoom · Click cluster to expand'}
+            ? 'Student Connectivity Network: 60 Students · Click student to open dossier'
+            : 'Classroom Hierarchy · Click cluster to expand · Scroll to zoom'}
         </span>
       </div>
     </div>
