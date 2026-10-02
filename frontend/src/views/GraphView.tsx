@@ -39,7 +39,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [dossierLoading, setDossierLoading] = useState<boolean>(false);
 
   // Toolbar & Visualization Controls
-  const [zoomScale, setZoomScale] = useState<number>(0.85);
+  const [zoomScale, setZoomScale] = useState<number>(1.0);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('Hierarchical');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [delinquentsOnly, setDelinquentsOnly] = useState<boolean>(false);
@@ -357,7 +357,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const delinquentCount = data.summary?.delinquents_count || 0;
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col space-y-2 pb-2">
+    <div className="h-[calc(100vh-112px)] flex flex-col space-y-2 pb-0">
       {/* ─── Top Graph Control Toolbar (Section 5) ─────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         {/* Left: Breadcrumb Navigation & Layer Status */}
@@ -484,10 +484,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
             </button>
             <button
               onClick={() => setZoomScale(1.0)}
-              className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface-variant cursor-pointer transition-colors ml-0.5"
-              title="Reset Zoom (100%)"
+              className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors ml-0.5"
+              title="Fit to Screen (100%)"
             >
-              <span className="material-symbols-outlined text-[14px]">restart_alt</span>
+              <span className="material-symbols-outlined text-[14px]">fit_screen</span>
             </button>
           </div>
 

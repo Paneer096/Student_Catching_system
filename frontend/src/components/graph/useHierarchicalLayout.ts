@@ -61,7 +61,7 @@ export function useHierarchicalLayout() {
 
       // ─── 1. Section Anchor Node (Top-Center for Hierarchical, Center for Radial) ──
       const sectionX = centerX;
-      const sectionY = layoutMode === 'Hierarchical' ? centerY - 240 : centerY;
+      const sectionY = layoutMode === 'Hierarchical' ? centerY - 130 : centerY;
 
       const sectionNode: RenderableNode = {
         id: data.section.id,
@@ -89,44 +89,42 @@ export function useHierarchicalLayout() {
 
         if (layoutMode === 'Hierarchical') {
           if (clusterCount <= 4) {
-            // Single wide arc below section anchor
-            const spanX = Math.min(840, (clusterCount - 1) * 280);
+            const spanX = Math.min(500, (clusterCount - 1) * 180);
             const startX = centerX - spanX / 2;
             const stepX = clusterCount > 1 ? spanX / (clusterCount - 1) : 0;
             cx = startX + idx * stepX;
-            cy = centerY + Math.sin((idx / Math.max(1, clusterCount - 1)) * Math.PI) * 60;
+            cy = centerY + Math.sin((idx / Math.max(1, clusterCount - 1)) * Math.PI) * 35;
           } else {
-            // 2 Staggered rows with generous spacing (at least 280-320px separation)
+            // 2 Staggered rows with 190px horizontal spacing and 140px vertical spacing
             const row1Count = Math.ceil(clusterCount / 2);
             const row2Count = clusterCount - row1Count;
             const isRow1 = idx < row1Count;
             const rowIndex = isRow1 ? idx : idx - row1Count;
             const countInThisRow = isRow1 ? row1Count : row2Count;
 
-            const spanX = Math.max(640, (countInThisRow - 1) * 320);
+            const spanX = Math.max(360, (countInThisRow - 1) * 190);
             const startX = centerX - spanX / 2;
             const stepX = countInThisRow > 1 ? spanX / (countInThisRow - 1) : 0;
 
             cx = startX + rowIndex * stepX;
-            // Row 1 sits at centerY - 50, Row 2 sits at centerY + 210
+            // Row 1 sits at centerY - 10, Row 2 sits at centerY + 130
             if (isRow1) {
-              cy = centerY - 50 + (rowIndex % 2 === 1 ? -25 : 15);
+              cy = centerY - 10 + (rowIndex % 2 === 1 ? -15 : 8);
             } else {
-              cy = centerY + 210 + (rowIndex % 2 === 1 ? 25 : -15);
+              cy = centerY + 130 + (rowIndex % 2 === 1 ? 15 : -8);
             }
           }
         } else if (layoutMode === 'Circular' || layoutMode === 'Radial') {
-          // Generous radial circle with 320px radius
           const angle = (2 * Math.PI * idx) / clusterCount - Math.PI / 2;
-          const radialDist = Math.max(310, Math.min(width, height) * 0.42);
+          const radialDist = Math.max(180, Math.min(width, height) * 0.32);
           cx = centerX + Math.cos(angle) * radialDist;
           cy = centerY + Math.sin(angle) * radialDist;
         } else {
-          // Force layout initial seeded positions: widely separated
+          // Force layout initial seeded positions
           const angle = (2 * Math.PI * idx) / clusterCount;
-          const baseRadius = 310;
-          cx = centerX + Math.cos(angle) * (baseRadius + (idx % 2) * 45);
-          cy = centerY + Math.sin(angle) * (baseRadius + (idx % 2) * 45);
+          const baseRadius = 190;
+          cx = centerX + Math.cos(angle) * (baseRadius + (idx % 2) * 30);
+          cy = centerY + Math.sin(angle) * (baseRadius + (idx % 2) * 30);
         }
 
         clusterCentroids[cl.id] = { x: cx, y: cy };
@@ -158,10 +156,8 @@ export function useHierarchicalLayout() {
         const isExpanded = expandedClusterId === cl.id || expandedClusterId === 'all';
         const members = cl.members || [];
         const memberCount = Math.max(1, members.length);
-        // Spacious radial orbit around cluster centroid
-        const radialExpansionRadius = Math.min(125, Math.max(80, 44 + memberCount * 5.5));
+        const radialExpansionRadius = Math.min(78, Math.max(50, 32 + memberCount * 3.5));
 
-        // Sort students by centrality so the anchor/leader is at top (12 o'clock)
         const sortedMembers = [...members].sort(
           (a, b) => (b.betweenness || 0) - (a.betweenness || 0)
         );
@@ -171,12 +167,10 @@ export function useHierarchicalLayout() {
           let sy = centroid.y;
 
           if (isExpanded) {
-            // Arranged in an organized radial orbital ring around cluster centroid
             const angle = (2 * Math.PI * sIdx) / memberCount - Math.PI / 2;
             sx = centroid.x + Math.cos(angle) * radialExpansionRadius;
             sy = centroid.y + Math.sin(angle) * radialExpansionRadius;
           } else {
-            // Collapsed at cluster centroid
             sx = centroid.x;
             sy = centroid.y;
           }
@@ -196,7 +190,7 @@ export function useHierarchicalLayout() {
             color: colors.fill,
             strokeColor: colors.stroke,
             strokeWidth: 1.8,
-            opacity: isExpanded ? 1 : 0, // Hidden when cluster collapsed to eliminate hairball
+            opacity: isExpanded ? 1 : 0,
             isDelinquent: st.is_delinquent,
             hasRiskBadge: st.classification === 'high_concern' || st.classification === 'at_risk',
             clusterId: cl.id,
@@ -208,12 +202,12 @@ export function useHierarchicalLayout() {
       // ─── 4. Faculty (Upper-Left Flank) & Clubs (Upper-Right Flank) ──────────
       if (showTeachers && data.teachers) {
         data.teachers.forEach((tch, idx) => {
-          let tx = centerX - 380 - idx * 75;
-          let ty = centerY - 230 + (idx % 2) * 45;
+          let tx = centerX - 230 - idx * 45;
+          let ty = centerY - 125 + (idx % 2) * 28;
           if (layoutMode === 'Radial') {
             const angle = -Math.PI * 0.75 + idx * 0.22;
-            tx = centerX + Math.cos(angle) * 490;
-            ty = centerY + Math.sin(angle) * 490;
+            tx = centerX + Math.cos(angle) * 280;
+            ty = centerY + Math.sin(angle) * 280;
           }
 
           const colors = NodeRenderer.getNodeColor('teacher', tch);
@@ -236,12 +230,12 @@ export function useHierarchicalLayout() {
 
       if (showClubs && data.clubs) {
         data.clubs.forEach((club, idx) => {
-          let cx = centerX + 380 + idx * 75;
-          let cy = centerY - 230 + (idx % 2) * 45;
+          let cx = centerX + 230 + idx * 45;
+          let cy = centerY - 125 + (idx % 2) * 28;
           if (layoutMode === 'Radial') {
             const angle = -Math.PI * 0.25 - idx * 0.22;
-            cx = centerX + Math.cos(angle) * 490;
-            cy = centerY + Math.sin(angle) * 490;
+            cx = centerX + Math.cos(angle) * 280;
+            cy = centerY + Math.sin(angle) * 280;
           }
 
           const colors = NodeRenderer.getNodeColor('club', club);

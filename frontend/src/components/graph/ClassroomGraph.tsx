@@ -209,11 +209,6 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
       {/* SVG Rendering Layer */}
       <svg
         className="w-full h-full absolute inset-0 pointer-events-auto"
-        style={{
-          transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomScale})`,
-          transformOrigin: 'center center',
-          transition: isDraggingRef.current ? 'none' : 'transform 0.1s ease-out',
-        }}
         onClick={() => {
           if (selectedNodeId) {
             onSelectNode(null);
@@ -283,8 +278,13 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
           </marker>
         </defs>
 
-        {/* ─── 1. Curved Quadratic Bezier Edges ──────────────────────────────── */}
-        <g className="edges-group">
+        {/* Viewport Transform Group: Pan & Center-Based Zoom */}
+        <g
+          transform={`translate(${panOffset.x}, ${panOffset.y}) translate(${dimensions.width / 2}, ${dimensions.height / 2}) scale(${zoomScale}) translate(${-dimensions.width / 2}, ${-dimensions.height / 2})`}
+          style={{ transition: isDraggingRef.current ? 'none' : 'transform 0.1s ease-out' }}
+        >
+          {/* ─── 1. Curved Quadratic Bezier Edges ──────────────────────────────── */}
+          <g className="edges-group">
           {visibleEdges.map((edge) => {
             const opacity = EdgeRenderer.getEdgeOpacity(
               edge.source,
@@ -566,6 +566,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
             );
           })}
         </g>
+        </g>
       </svg>
 
       {/* Floating Hover Tooltip (Interactive Focus Preview) */}
@@ -573,8 +574,8 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
         <div
           className="absolute pointer-events-none z-30 px-3 py-2 rounded-xl bg-surface-container-lowest/95 backdrop-blur-xl border border-outline-variant shadow-xl text-xs font-sans max-w-xs transition-opacity duration-150"
           style={{
-            left: `${Math.min(dimensions.width - 240, Math.max(10, hoverTooltip.x * zoomScale + panOffset.x + 15))}px`,
-            top: `${Math.min(dimensions.height - 130, Math.max(10, hoverTooltip.y * zoomScale + panOffset.y - 15))}px`,
+            left: `${Math.min(dimensions.width - 240, Math.max(10, (hoverTooltip.x - dimensions.width / 2) * zoomScale + dimensions.width / 2 + panOffset.x + 15))}px`,
+            top: `${Math.min(dimensions.height - 130, Math.max(10, (hoverTooltip.y - dimensions.height / 2) * zoomScale + dimensions.height / 2 + panOffset.y - 15))}px`,
           }}
         >
           <div className="flex items-center gap-2 mb-1">
