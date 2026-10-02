@@ -45,9 +45,9 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [delinquentsOnly, setDelinquentsOnly] = useState<boolean>(false);
 
-  // Edge Type Filter: Rule 1: By default ONLY Hierarchical and Aggregates are shown!
+  // Edge Type Filter: Rule 1: By default ONLY clean Hierarchical links are shown (no cross-circle clutter)
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeTypeKey>>(
-    new Set(['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER'])
+    new Set(['HIERARCHICAL'])
   );
 
   // Switch between Classroom Hierarchy and pure Student Connectivity Graph
@@ -64,7 +64,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
       setActiveLayer(1);
       setExpandedClusterId(null);
       // Restore default hierarchical edge types
-      setEnabledEdgeTypes(new Set(['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER']));
+      setEnabledEdgeTypes(new Set(['HIERARCHICAL']));
     }
   };
 
@@ -339,8 +339,28 @@ export const GraphView: React.FC<GraphViewProps> = ({
         (m) => m.roll_no.toLowerCase() === rollNo.toLowerCase() || m.name.toLowerCase().includes(rollNo.toLowerCase())
       );
       if (student) {
-        setExpandedClusterId(cl.id);
-        setActiveLayer(3);
+        if (graphMode === 'hierarchy') {
+          setExpandedClusterId(cl.id);
+          setActiveLayer(3);
+        }
+        const studentNode: RenderableNode = {
+          id: student.id,
+          kind: 'student',
+          x: 0,
+          y: 0,
+          label: student.name,
+          subLabel: student.roll_no,
+          initials: NodeRenderer.getInitials(student.name),
+          radius: 13.5,
+          color: student.classification === 'high_concern' ? '#ef4444' : '#3b82f6',
+          strokeColor: '#ffffff',
+          strokeWidth: 2,
+          opacity: 1,
+          isDelinquent: student.is_delinquent,
+          clusterId: cl.id,
+          data: student,
+        };
+        setSelectedNode(studentNode);
         loadStudentDossier(student.roll_no);
         setSearchQuery('');
         break;

@@ -198,7 +198,10 @@ export class NodeRenderer {
         return { show: zoomLevel >= 0.25, detailLevel: 'full' };
 
       case 'student':
-        if (zoomLevel >= 0.75) {
+        if (isFocusedOrNeighbor) {
+          return { show: true, detailLevel: 'full' };
+        }
+        if (zoomLevel >= 1.3) {
           return { show: true, detailLevel: 'full' };
         }
         if (zoomLevel >= 0.5) {

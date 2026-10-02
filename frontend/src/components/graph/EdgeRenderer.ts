@@ -103,7 +103,9 @@ export class EdgeRenderer {
     tx: number,
     ty: number,
     curveFactor = 0.15,
-    indexOffset = 0
+    indexOffset = 0,
+    sourceId?: string,
+    targetId?: string
   ): { path: string; midX: number; midY: number } {
     const dx = tx - sx;
     const dy = ty - sy;
@@ -121,8 +123,9 @@ export class EdgeRenderer {
     const nx = -dy / dist;
     const ny = dx / dist;
 
-    // Offset control point based on distance and index
-    const offset = (dist * curveFactor + indexOffset * 10);
+    // Offset control point based on distance, index, and direction
+    const sign = sourceId && targetId && sourceId > targetId ? -1 : 1;
+    const offset = (dist * curveFactor + indexOffset * 10) * sign;
     const cx = mx + nx * offset;
     const cy = my + ny * offset;
 

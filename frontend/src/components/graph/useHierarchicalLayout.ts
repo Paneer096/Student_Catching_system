@@ -402,31 +402,7 @@ export function useHierarchicalLayout() {
         });
       }
 
-      // Aggregated Inter-Cluster Edges
-      if (data.aggregate_edges) {
-        data.aggregate_edges.forEach((ae, idx) => {
-          const sCentroid = clusterCentroids[ae.source];
-          const tCentroid = clusterCentroids[ae.target];
-          if (!sCentroid || !tCentroid) return;
-
-          edges.push({
-            id: `agg-edge-${idx}`,
-            source: ae.source,
-            target: ae.target,
-            sourceX: sCentroid.x,
-            sourceY: sCentroid.y,
-            targetX: tCentroid.x,
-            targetY: tCentroid.y,
-            type: 'AGGREGATE_CROSS_CLUSTER',
-            weight: ae.weight,
-            color: '#94a3b8',
-            label: ae.label,
-            count: ae.count,
-            isAggregated: true,
-          });
-        });
-      }
-
+      // Return computed nodes and cleanly filtered edges
       return { nodes, edges, clusterCentroids };
     },
     []

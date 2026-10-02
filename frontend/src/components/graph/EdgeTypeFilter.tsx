@@ -74,7 +74,7 @@ export const EdgeTypeFilter: React.FC<EdgeTypeFilterProps> = ({
                 onSetPreset(
                   isStudentConnectivityMode
                     ? ['FRIENDS_WITH', 'BUNKS_WITH', 'STUDIES_WITH']
-                    : ['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER']
+                    : ['HIERARCHICAL']
                 )
               }
               className="text-[10px] text-primary hover:underline font-mono cursor-pointer"
@@ -120,7 +120,7 @@ export const EdgeTypeFilter: React.FC<EdgeTypeFilterProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => onSetPreset(['HIERARCHICAL', 'AGGREGATE_CROSS_CLUSTER'])}
+                  onClick={() => onSetPreset(['HIERARCHICAL'])}
                   className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface border border-outline-variant/60 cursor-pointer"
                 >
                   Hierarchy Only

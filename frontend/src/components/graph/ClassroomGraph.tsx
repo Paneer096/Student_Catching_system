@@ -103,9 +103,13 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
   // Filter visible edges according to enabled types AND node visibility
   const visibleEdges = useMemo(() => {
     const visibleNodeIds = new Set<string>();
+    const nodeClusterMap = new Map<string, string>();
     nodes.forEach((n) => {
       if (n.kind !== 'student' || n.opacity > 0) {
         visibleNodeIds.add(n.id);
+      }
+      if (n.clusterId) {
+        nodeClusterMap.set(n.id, n.clusterId);
       }
     });
 
@@ -114,13 +118,31 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
       if (!visibleNodeIds.has(e.source) || !visibleNodeIds.has(e.target)) {
         return false;
       }
-      if (e.isAggregated) {
-        // Show aggregated cross-cluster edge only when clusters are collapsed
-        return enabledEdgeTypes.has('AGGREGATE_CROSS_CLUSTER') && !expandedClusterId;
+
+      // 1. Remove connections between friend circles (AGGREGATE_CROSS_CLUSTER)
+      if (e.isAggregated || e.type === 'AGGREGATE_CROSS_CLUSTER') {
+        return false;
       }
+
+      // 2. Remove connection in friend circle of friends:
+      // If both source and target are students in the same friend circle/pod,
+      // hide the redundant static friendship line unless one of them is actively hovered or selected!
+      const sourceCluster = nodeClusterMap.get(e.source);
+      const targetCluster = nodeClusterMap.get(e.target);
+      const isIntraClusterFriendship =
+        e.type === 'FRIENDS_WITH' &&
+        sourceCluster &&
+        targetCluster &&
+        sourceCluster === targetCluster;
+
+      if (isIntraClusterFriendship) {
+        const isFocused = activeFocusId === e.source || activeFocusId === e.target;
+        if (!isFocused) return false;
+      }
+
       return enabledEdgeTypes.has(e.type);
     });
-  }, [edges, nodes, enabledEdgeTypes, expandedClusterId]);
+  }, [edges, nodes, enabledEdgeTypes, activeFocusId]);
 
   // Focus state for styling
   const focusState: FocusState = {
@@ -132,7 +154,14 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
     expandedClusterId,
   };
 
-  // ─── Mouse Interactions (Pan & Zoom) ───────────────────────────────────────
+  // Auto-center canvas on mode switch or layer reset
+  useEffect(() => {
+    setPanOffset({ x: 0, y: 0 });
+  }, [studentConnectivityEnabled, activeLayer]);
+
+  // ─── Mouse Interactions (Pan & Zoom with requestAnimationFrame) ─────────────
+  const animFrameRef = useRef<number | null>(null);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only primary button
     isDraggingRef.current = true;
@@ -141,15 +170,22 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDraggingRef.current) {
-      setPanOffset({
-        x: e.clientX - dragStartRef.current.x,
-        y: e.clientY - dragStartRef.current.y,
+      const newX = e.clientX - dragStartRef.current.x;
+      const newY = e.clientY - dragStartRef.current.y;
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+      animFrameRef.current = requestAnimationFrame(() => {
+        setPanOffset({ x: newX, y: newY });
       });
     }
   };
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -357,12 +393,15 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
             const isDirectlyConnected =
               activeFocusId === edge.source || activeFocusId === edge.target;
             const strokeWidth = EdgeRenderer.getEdgeStrokeWidth(edge, isDirectlyConnected);
-            const { path, midX, midY } = EdgeRenderer.calculateBezierPath(
+            const { path } = EdgeRenderer.calculateBezierPath(
               edge.sourceX,
               edge.sourceY,
               edge.targetX,
               edge.targetY,
-              0.12
+              0.12,
+              0,
+              edge.source,
+              edge.target
             );
 
             const markerId =
@@ -385,45 +424,9 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                   strokeWidth={strokeWidth}
                   strokeOpacity={opacity}
                   strokeDasharray={edge.type === 'HIERARCHICAL' ? '4 3' : undefined}
-                  markerEnd={edge.type !== 'AGGREGATE_CROSS_CLUSTER' ? markerId : undefined}
+                  markerEnd={markerId}
                   className="transition-opacity duration-200"
                 />
-
-                {/* Aggregated Edge Connection Badge */}
-                {edge.isAggregated && edge.count && edge.count > 1 && (
-                  <g
-                    transform={`translate(${midX}, ${midY})`}
-                    className="cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectCluster(edge.source);
-                    }}
-                  >
-                    <rect
-                      x="-38"
-                      y="-10"
-                      width="76"
-                      height="20"
-                      rx="10"
-                      fill="#1e293b"
-                      stroke="#94a3b8"
-                      strokeWidth="1.2"
-                      opacity={opacity}
-                    />
-                    <text
-                      x="0"
-                      y="3.5"
-                      textAnchor="middle"
-                      fill="#f1f5f9"
-                      fontSize="9"
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                      opacity={opacity}
-                    >
-                      {edge.count} ties
-                    </text>
-                  </g>
-                )}
               </g>
             );
           })}
@@ -624,21 +627,50 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                         : node.radius + (node.kind === 'cluster' ? 24 : 14)
                     })`}
                   >
+                    {/* Semi-transparent pill backdrop for contrast & legibility */}
+                    <rect
+                      x={
+                        node.kind === 'student'
+                          ? labelRule.detailLevel === 'full'
+                            ? -Math.min(50, (node.label.length * 5.2) / 2 + 6)
+                            : -24
+                          : -Math.min(65, (node.label.length * 5.5) / 2 + 8)
+                      }
+                      y="-7"
+                      width={
+                        node.kind === 'student'
+                          ? labelRule.detailLevel === 'full'
+                            ? Math.min(100, node.label.length * 5.2 + 12)
+                            : 48
+                          : Math.min(130, node.label.length * 5.5 + 16)
+                      }
+                      height="15"
+                      rx="7.5"
+                      fill="#090d16"
+                      fillOpacity={0.85}
+                      stroke={isSelected ? '#facc15' : '#334155'}
+                      strokeWidth={isSelected ? 1 : 0.6}
+                    />
                     <text
                       textAnchor="middle"
-                      fill="#f8fafc"
-                      fontSize="10"
+                      dominantBaseline="central"
+                      fill={isSelected ? '#fef08a' : '#f8fafc'}
+                      fontSize={node.kind === 'student' ? '8.5' : '10'}
                       fontFamily="monospace"
                       fontWeight={isSelected ? 'bold' : 'normal'}
-                      className="drop-shadow-md select-none"
+                      className="select-none"
                     >
-                      {labelRule.detailLevel === 'initials' && node.subLabel
-                        ? node.subLabel
+                      {node.kind === 'student'
+                        ? labelRule.detailLevel === 'full'
+                          ? node.label.length > 14
+                            ? node.label.slice(0, 13) + '…'
+                            : node.label
+                          : node.subLabel || node.initials
                         : node.label}
                     </text>
-                    {labelRule.detailLevel === 'full' && node.subLabel && (
+                    {labelRule.detailLevel === 'full' && node.subLabel && node.kind !== 'student' && (
                       <text
-                        y="11"
+                        y="12"
                         textAnchor="middle"
                         fill="#94a3b8"
                         fontSize="8.5"
@@ -695,6 +727,22 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
           )}
         </div>
       )}
+
+      {/* Canvas Viewport Reset / Recenter Button */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPanOffset({ x: 0, y: 0 });
+            onZoomChange(1.0);
+          }}
+          className="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 backdrop-blur-md border border-outline-variant/60 hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[11px] font-mono font-medium flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
+          title="Recenter and fit graph canvas"
+        >
+          <span className="material-symbols-outlined text-[15px] text-primary">center_focus_strong</span>
+          <span>Recenter</span>
+        </button>
+      </div>
 
       {/* Navigation Helper Indicator in Canvas Corner */}
       <div className="absolute bottom-3 left-3 pointer-events-none text-[10px] font-mono text-on-surface-variant/80 bg-surface-container-lowest/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-outline-variant/60 flex items-center gap-2 shadow-xs">
