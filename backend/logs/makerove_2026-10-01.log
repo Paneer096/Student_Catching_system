@@ -1,0 +1,80 @@
+2026-10-01 00:53:23 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 00:53:23 | INFO     | app.main:lifespan:32 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 00:53:23 | INFO     | app.main:lifespan:36 | Database initialized
+2026-10-01 01:20:08 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:20:08 | INFO     | app.main:lifespan:32 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:20:08 | INFO     | app.main:lifespan:36 | Database initialized
+2026-10-01 01:20:27 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:20:27 | INFO     | app.main:lifespan:32 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:20:27 | INFO     | app.main:lifespan:36 | Database initialized
+2026-10-01 01:30:45 | INFO     | app.main:lifespan:41 | Shutting down Makerove
+2026-10-01 01:30:47 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:30:47 | INFO     | app.main:lifespan:32 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:30:47 | INFO     | app.main:lifespan:36 | Database initialized
+2026-10-01 01:32:15 | INFO     | app.main:lifespan:41 | Shutting down Makerove
+2026-10-01 01:32:17 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:32:17 | INFO     | app.main:lifespan:32 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:32:17 | INFO     | app.main:lifespan:36 | Database initialized
+2026-10-01 01:46:04 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:46:04 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:46:04 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 01:48:02 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 01:48:04 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:48:04 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:48:04 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 01:48:14 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 01:48:16 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:48:16 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:48:16 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 01:52:27 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 01:52:29 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 01:52:29 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 01:52:29 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:03:19 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:03:21 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:03:21 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:03:21 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:03:31 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:03:32 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:03:32 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:03:32 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:03:50 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:03:52 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:03:52 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:03:52 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:11:30 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:11:31 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:11:31 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:11:31 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:11:39 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:11:41 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:11:41 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:11:41 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:16:47 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:16:49 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:16:49 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:16:49 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:16:56 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:16:57 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:16:57 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:16:57 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:26:56 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:26:58 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:26:58 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:26:58 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:27:05 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:27:07 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:27:07 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:27:07 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:27:17 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:27:19 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:27:19 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:27:19 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 02:28:09 | INFO     | app.api.routers.admin:load_sample_data:59 | Admin triggered sample data load (DEV only)
+2026-10-01 02:51:16 | INFO     | app.main:lifespan:53 | Shutting down Makerove
+2026-10-01 02:51:18 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 02:51:18 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 02:51:18 | INFO     | app.main:lifespan:48 | Database initialized
+2026-10-01 09:34:01 | INFO     | app.logging_config:setup_logging:85 | Makerove logging initialized (PII scrubbing active)
+2026-10-01 09:34:01 | INFO     | app.main:lifespan:44 | Starting Makerove — A teacher's sixth sense — support before sanction.
+2026-10-01 09:34:01 | INFO     | app.main:lifespan:48 | Database initialized

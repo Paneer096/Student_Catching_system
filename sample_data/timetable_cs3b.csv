@@ -1,0 +1,20 @@
+section_code,day,period,subject_code,teacher_id,is_lab,room
+CS-3B,Monday,1,CS301,tch-001,false,Room 201
+CS-3B,Monday,2,CS302,tch-002,false,Room 201
+CS-3B,Monday,3,CS303,tch-003,false,Room 201
+CS-3B,Monday,4,CS304,tch-004,false,Room 201
+CS-3B,Tuesday,1,CS302,tch-002,false,Room 201
+CS-3B,Tuesday,2,CS301,tch-001,false,Room 201
+CS-3B,Tuesday,3,CS305L,tch-001,true,Lab 3
+CS-3B,Tuesday,4,CS305L,tch-001,true,Lab 3
+CS-3B,Wednesday,1,CS303,tch-003,false,Room 201
+CS-3B,Wednesday,2,CS304,tch-004,false,Room 201
+CS-3B,Wednesday,3,MAT201,tch-005,false,Room 201
+CS-3B,Thursday,1,CS301,tch-001,false,Room 201
+CS-3B,Thursday,2,CS302,tch-002,false,Room 201
+CS-3B,Thursday,3,CS303,tch-003,false,Room 201
+CS-3B,Friday,1,CS304,tch-004,false,Room 201
+CS-3B,Friday,2,MAT201,tch-005,false,Room 201
+CS-3B,Friday,3,CS301,tch-001,false,Room 201
+CS-3B,Friday,4,PHY101,tch-004,false,Room 201
+CS-3B,Friday,5,PHY101,tch-004,true,Physics Lab

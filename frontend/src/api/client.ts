@@ -1,0 +1,456 @@
+/**
+ * Makerove — API Client
+ * Authentic API integration: zero fake data, zero hardcoded numbers.
+ * Connects directly to FastAPI backend and SQLite/NetworkX analytical engines.
+ */
+
+export interface User {
+  id: string;
+  username: string;
+  role: 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'HOD' | 'COUNSELOR' | 'ADMIN' | 'STUDENT';
+  name: string;
+  department?: string;
+  section_ids?: string[];
+  must_change_password?: boolean;
+  consent_accepted?: boolean;
+}
+
+export interface ConsentNotice {
+  version: string;
+  text: string;
+  accepted: boolean;
+}
+
+export interface DashboardSummary {
+  total_students: number;
+  attendance_rate: number;
+  cohorts_count: number;
+  mass_bunks_count: number;
+  active_interventions: number;
+  weekly_activity: Array<{
+    day: string;
+    day_idx?: number;
+    attendance: number;
+    rate?: number;
+    total?: number;
+    present?: number;
+    bunk_count: number;
+    is_peak_risk?: boolean;
+  }>;
+  flagged_cohorts: Array<{
+    id: string;
+    name: string;
+    cohort_id?: string;
+    size: number;
+    risk: string;
+    risk_level?: string;
+    top_peer: string;
+    anchor_roll?: string;
+    anchor_name?: string;
+    pattern?: string;
+    risk_score?: number;
+    members: string[];
+  }>;
+  recent_alerts: Array<{
+    id: string;
+    title: string;
+    date?: string;
+    time?: string;
+    severity: 'HIGH' | 'MEDIUM' | 'LOW';
+    absentees: number;
+    reason?: string;
+  }>;
+  has_data: boolean;
+}
+
+export interface GraphNode {
+  id: string;
+  roll_no: string;
+  name: string;
+  role: string;
+  type: 'classroom' | 'teacher' | 'cr' | 'anchor' | 'bridge' | 'associate' | 'student';
+  level: number;
+  x: number;
+  y: number;
+  score: number;
+  attendance_pct: number;
+  total_classes: number;
+  absences: number;
+  cohort: string;
+  cohort_color?: string;
+  is_delinquent?: boolean;
+  delinquency_label?: string | null;
+  betweenness: number;
+  pagerank: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  source_roll: string;
+  target_roll: string;
+  weight: number;
+  type?: 'hierarchy' | 'coabsence';
+  label?: string;
+}
+
+export interface StudentDossier {
+  id: string;
+  roll_no: string;
+  name: string;
+  branch: string;
+  year: number;
+  section: string;
+  attendance_pct: number;
+  total_classes: number;
+  absences: number;
+  role: string;
+  type?: string;
+  cohort: string;
+  cohort_color?: string;
+  is_delinquent?: boolean;
+  delinquency_label?: string | null;
+  pagerank: number;
+  betweenness: number;
+  peers: Array<{
+    roll_no: string;
+    name: string;
+    mutual_absences: number;
+    cohort: string;
+  }>;
+  recent_attendance: Array<{
+    date: string;
+    period: number;
+    subject_code: string;
+    status: string;
+  }>;
+  classroom_info?: {
+    strength: number;
+    department: string;
+    class_teacher: string;
+  };
+  teacher_info?: {
+    department: string;
+    sections: string[];
+    subjects: string[];
+  };
+}
+
+export interface MassBunkEvent {
+  id: string;
+  date: string;
+  day: string;
+  period: number;
+  subject_code: string;
+  absent_count: number;
+  total_enrolled: number;
+  absent_percentage: number;
+  risk_score: number;
+  structural_anchor: {
+    roll_no: string;
+    name: string;
+  } | null;
+  participating_roll_numbers: string[];
+  reason: string;
+}
+
+export interface CalendarRiskDay {
+  date: string;
+  day: string;
+  day_num?: number;
+  risk_level: 'HIGH' | 'MEDIUM' | 'LOW';
+  risk_score: number;
+  reason: string;
+  recommendation?: string;
+  is_holiday: boolean;
+  holiday_name: string | null;
+  consecutive_days_gained?: number;
+  preceding_off_days?: number;
+  following_off_days?: number;
+  vacation_dates?: string[];
+  is_bridge_day?: boolean;
+  has_lab?: boolean;
+  has_detected_bunk?: boolean;
+  bunk_details?: {
+    absent_count: number;
+    total_enrolled: number;
+    period: number;
+    subject: string;
+    anchor?: string;
+  } | null;
+  periods?: Array<{
+    period: number;
+    subject: string;
+    is_lab: boolean;
+    room: string;
+  }>;
+}
+
+export interface CalendarEvent {
+  id: string;
+  date: string;
+  name: string;
+  type: string;
+  is_holiday: boolean;
+}
+
+export interface InterventionItem {
+  id: string;
+  type: string;
+  target_cohort: string;
+  students_involved: string[];
+  created_at: string;
+  status: string;
+  action_plan: string;
+  effectiveness: string;
+  assigned_to: string;
+}
+
+export interface StudentRosterItem {
+  id: string;
+  roll_no: string;
+  name: string;
+  branch: string;
+  year: number;
+  attendance_pct: number;
+  attendance?: number;
+  total_classes: number;
+  absences: number;
+  cohort: string;
+  cohort_color?: string;
+  role: string;
+  pagerank: number;
+  betweenness: number;
+  influenceScore?: number;
+  is_delinquent?: boolean;
+  delinquency_label?: string | null;
+  category?: string;
+  statusBadge?: string;
+}
+
+export interface IngestionBatchItem {
+  id: string;
+  filename: string;
+  data_type: string;
+  status: string;
+  row_count: number;
+  success_count: number;
+  error_count: number;
+  created_at: string | null;
+}
+
+export interface AuditLogItem {
+  id: string;
+  timestamp: string;
+  action: string;
+  actor_user_id: string;
+  actor_role: string;
+  details: any;
+  hash: string;
+}
+
+class ApiClient {
+  private csrfToken: string | null = null;
+  private baseUrl = '/api/v1';
+
+  setCsrfToken(token: string) {
+    this.csrfToken = token;
+  }
+
+  getCsrfToken() {
+    return this.csrfToken;
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const isFormData = options.body instanceof FormData;
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (!isFormData && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    if (this.csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method || '')) {
+      headers['X-CSRF-Token'] = this.csrfToken;
+    }
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}: Request failed`);
+    }
+
+    return response.json();
+  }
+
+  async login(username: string, password: string) {
+    const data = await this.request<{
+      user: User;
+      csrf_token: string;
+      consent_accepted: boolean;
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    this.setCsrfToken(data.csrf_token);
+    return data;
+  }
+
+  async logout() {
+    await this.request('/auth/logout', { method: 'POST' });
+    this.csrfToken = null;
+  }
+
+  async getMe() {
+    const data = await this.request<{
+      user: User;
+      csrf_token: string;
+      consent_accepted: boolean;
+    }>('/auth/me');
+    this.setCsrfToken(data.csrf_token);
+    return data;
+  }
+
+  async getConsentNotice(): Promise<ConsentNotice> {
+    return this.request<ConsentNotice>('/consent/notice');
+  }
+
+  async acceptConsent(): Promise<{ success: boolean; version: string }> {
+    return this.request('/consent/accept', {
+      method: 'POST',
+      body: JSON.stringify({ purpose: 'educational_support' }),
+    });
+  }
+
+  async getHealth() {
+    return this.request<{
+      status: string;
+      app_name: string;
+      database: string;
+      scheduler: string;
+      llm?: { configured: boolean; model: string | null };
+    }>('/health');
+  }
+
+  // ── Real Endpoints (De-Vibecoded) ──────────────────────────────────────────
+
+  async getDashboardSummary(section = 'CS-3B'): Promise<DashboardSummary> {
+    return this.request<DashboardSummary>(`/dashboard/summary?section=${encodeURIComponent(section)}`);
+  }
+
+  async getGraphNodes(section = 'CS-3B'): Promise<{
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    summary: { student_count: number; cohorts_count: number; edge_count: number; section_code: string };
+  }> {
+    return this.request(`/graph/nodes?section=${encodeURIComponent(section)}`);
+  }
+
+  async getStudentProfile(rollNo: string): Promise<StudentDossier> {
+    return this.request<StudentDossier>(`/graph/student/${encodeURIComponent(rollNo)}`);
+  }
+
+  async getMassBunks(section = 'CS-3B'): Promise<MassBunkEvent[]> {
+    return this.request<MassBunkEvent[]>(`/detection/mass-bunks?section=${encodeURIComponent(section)}`);
+  }
+
+  async getCalendarRisk(section = 'CS-3B', month = '2026-10', weekendPolicy = 'sat_sun'): Promise<CalendarRiskDay[]> {
+    return this.request<CalendarRiskDay[]>(
+      `/calendar/risk-week?section=${encodeURIComponent(section)}&month=${encodeURIComponent(month)}&weekend_policy=${encodeURIComponent(weekendPolicy)}`
+    );
+  }
+
+  async addBulkHolidays(payload: {
+    name: string;
+    start_date?: string;
+    end_date?: string;
+    dates?: string[];
+    type?: string;
+    is_holiday?: boolean;
+  }): Promise<{ status: string; message: string; affected_dates: string[] }> {
+    return this.request('/calendar/holidays/bulk', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteHoliday(dateStr: string): Promise<{ status: string; message: string; date: string }> {
+    return this.request(`/calendar/holidays/${encodeURIComponent(dateStr)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async resetCalendarDefaults(): Promise<{ status: string; message: string }> {
+    return this.request('/calendar/holidays/reset-defaults', {
+      method: 'POST',
+    });
+  }
+
+  async getCalendarEvents(): Promise<CalendarEvent[]> {
+    return this.request<CalendarEvent[]>('/calendar/events');
+  }
+
+  async getInterventions(section = 'CS-3B'): Promise<InterventionItem[]> {
+    return this.request<InterventionItem[]>(`/interventions?section=${encodeURIComponent(section)}`);
+  }
+
+  async createIntervention(payload: {
+    student_ids: string[];
+    type: string;
+    trigger_context: string;
+    notes?: string;
+    assigned_to?: string;
+  }): Promise<{ status: string; id: string; message: string }> {
+    return this.request('/interventions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getStudentsRoster(section = 'CS-3B'): Promise<StudentRosterItem[]> {
+    return this.request<StudentRosterItem[]>(`/students?section=${encodeURIComponent(section)}`);
+  }
+
+  async getIngestionHistory(): Promise<IngestionBatchItem[]> {
+    return this.request<IngestionBatchItem[]>('/ingest/history');
+  }
+
+  async uploadCsv(
+    type: 'attendance' | 'calendar' | 'students' | 'timetable',
+    file: File
+  ): Promise<{ status: string; records_inserted?: number; events_ingested?: number; total_rows?: number; errors_count?: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(`/ingest/${type}`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async getAuditLogs(): Promise<AuditLogItem[]> {
+    return this.request<AuditLogItem[]>('/audit/logs');
+  }
+
+  async verifyAuditChain(): Promise<{ verified: boolean; total_records: number; message: string }> {
+    return this.request('/admin/audit/verify');
+  }
+
+  async loadSampleData(): Promise<{
+    status: string;
+    message: string;
+    results: any;
+  }> {
+    return this.request('/admin/load-sample-data', {
+      method: 'POST',
+    });
+  }
+}
+
+export const api = new ApiClient();

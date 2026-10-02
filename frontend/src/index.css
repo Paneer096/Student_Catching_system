@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* ── Light Mode ("Jurisdiction Protocol" Corporate Theme) ── */
+  --color-primary: #002046;
+  --color-primary-container: #1b365d;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #87a0cd;
+  --color-primary-fixed: #d6e3ff;
+  --color-primary-fixed-dim: #aec7f7;
+
+  --color-secondary: #3b6090;
+  --color-secondary-container: #a5c8ff;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #2e5484;
+  --color-secondary-fixed: #d4e3ff;
+  --color-secondary-fixed-dim: #a5c8ff;
+
+  --color-tertiary: #002715;
+  --color-tertiary-container: #003f25;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #5caf81;
+  --color-tertiary-fixed: #9ff5c1;
+  --color-tertiary-fixed-dim: #83d8a6;
+
+  --color-background: #f7fafc;
+  --color-surface: #f7fafc;
+  --color-surface-dim: #d7dadc;
+  --color-surface-bright: #f7fafc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f1f4f6;
+  --color-surface-container: #ebeef0;
+  --color-surface-container-high: #e5e9eb;
+  --color-surface-container-highest: #e0e3e5;
+  --color-surface-variant: #e0e3e5;
+  --color-surface-tint: #465f88;
+
+  --color-on-background: #181c1e;
+  --color-on-surface: #181c1e;
+  --color-on-surface-variant: #44474e;
+
+  --color-outline: #74777f;
+  --color-outline-variant: #c4c6cf;
+
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eef1f3;
+  --color-inverse-primary: #aec7f7;
+}
+
+html.dark {
+  /* ── Dark Mode ("Obsidian Protocol" Tactical Intelligence Theme) ── */
+  --color-primary: #ffffff;
+  --color-primary-container: #1b365d;
+  --color-on-primary: #121212;
+  --color-on-primary-container: #aec7f7;
+  --color-primary-fixed: #3b5275;
+  --color-primary-fixed-dim: #293a54;
+
+  --color-secondary: #90b8eb;
+  --color-secondary-container: #223755;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #d4e3ff;
+  --color-secondary-fixed: #2b3e5b;
+  --color-secondary-fixed-dim: #1e2c42;
+
+  --color-tertiary: #5caf81;
+  --color-tertiary-container: #003f25;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #9ff5c1;
+  --color-tertiary-fixed: #003f25;
+  --color-tertiary-fixed-dim: #002715;
+
+  --color-background: #0e0e0e;
+  --color-surface: #141313;
+  --color-surface-dim: #101010;
+  --color-surface-bright: #252424;
+  --color-surface-container-lowest: #181818;
+  --color-surface-container-low: #1e1e1e;
+  --color-surface-container: #242424;
+  --color-surface-container-high: #2c2c2c;
+  --color-surface-container-highest: #353434;
+  --color-surface-variant: #303030;
+  --color-surface-tint: #90b8eb;
+
+  --color-on-background: #e5e2e1;
+  --color-on-surface: #f1f4f6;
+  --color-on-surface-variant: #a3a6ad;
+
+  --color-outline: #5c6068;
+  --color-outline-variant: #2d3036;
+
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+
+  --color-inverse-surface: #e5e2e1;
+  --color-inverse-on-surface: #313030;
+  --color-inverse-primary: #002046;
+}
+
+@theme {
+  --color-primary: var(--color-primary);
+  --color-primary-container: var(--color-primary-container);
+  --color-on-primary: var(--color-on-primary);
+  --color-on-primary-container: var(--color-on-primary-container);
+  --color-primary-fixed: var(--color-primary-fixed);
+  --color-primary-fixed-dim: var(--color-primary-fixed-dim);
+
+  --color-secondary: var(--color-secondary);
+  --color-secondary-container: var(--color-secondary-container);
+  --color-on-secondary: var(--color-on-secondary);
+  --color-on-secondary-container: var(--color-on-secondary-container);
+  --color-secondary-fixed: var(--color-secondary-fixed);
+  --color-secondary-fixed-dim: var(--color-secondary-fixed-dim);
+
+  --color-tertiary: var(--color-tertiary);
+  --color-tertiary-container: var(--color-tertiary-container);
+  --color-on-tertiary: var(--color-on-tertiary);
+  --color-on-tertiary-container: var(--color-on-tertiary-container);
+  --color-tertiary-fixed: var(--color-tertiary-fixed);
+  --color-tertiary-fixed-dim: var(--color-tertiary-fixed-dim);
+
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-dim: var(--color-surface-dim);
+  --color-surface-bright: var(--color-surface-bright);
+  --color-surface-container-lowest: var(--color-surface-container-lowest);
+  --color-surface-container-low: var(--color-surface-container-low);
+  --color-surface-container: var(--color-surface-container);
+  --color-surface-container-high: var(--color-surface-container-high);
+  --color-surface-container-highest: var(--color-surface-container-highest);
+  --color-surface-variant: var(--color-surface-variant);
+  --color-surface-tint: var(--color-surface-tint);
+
+  --color-on-background: var(--color-on-background);
+  --color-on-surface: var(--color-on-surface);
+  --color-on-surface-variant: var(--color-on-surface-variant);
+
+  --color-outline: var(--color-outline);
+  --color-outline-variant: var(--color-outline-variant);
+
+  --color-error: var(--color-error);
+  --color-error-container: var(--color-error-container);
+  --color-on-error: var(--color-on-error);
+  --color-on-error-container: var(--color-on-error-container);
+
+  --color-inverse-surface: var(--color-inverse-surface);
+  --color-inverse-on-surface: var(--color-inverse-on-surface);
+  --color-inverse-primary: var(--color-inverse-primary);
+
+  /* Layout dimensions */
+  --spacing-sidebar_width: 260px;
+  --spacing-header_height: 64px;
+  --spacing-container_padding: 24px;
+  --spacing-gutter: 16px;
+  --spacing-stack_lg: 24px;
+  --spacing-stack_md: 16px;
+  --spacing-stack_sm: 8px;
+  --spacing-base_unit: 4px;
+
+  /* Typography */
+  --font-sans: "Inter", sans-serif;
+  --font-body-sm: "Inter", sans-serif;
+  --font-label-md: "Inter", sans-serif;
+  --font-body-lg: "Inter", sans-serif;
+  --font-body-md: "Inter", sans-serif;
+  --font-headline-sm: "Inter", sans-serif;
+  --font-headline-md: "Inter", sans-serif;
+  --font-display-lg: "Inter", sans-serif;
+  --font-label-bold: "Inter", sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Material Symbols alignment and optical sizing */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+.material-symbols-outlined.fill-icon,
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Universal clear scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 rgba(0, 0, 0, 0.05);
+}
+
+html.dark * {
+  scrollbar-color: #475569 rgba(255, 255, 255, 0.04);
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
+/* Pattern background for login & elevated backdrops */
+.pattern-bg {
+  background-color: var(--color-background);
+  background-image: radial-gradient(var(--color-outline-variant) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Coordinate grid for Graph Canvas */
+.canvas-grid {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+}
+
+html.dark .canvas-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
+}

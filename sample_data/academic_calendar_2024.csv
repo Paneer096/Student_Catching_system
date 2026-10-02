@@ -1,0 +1,16 @@
+date,name,type,is_holiday
+2026-10-02,Gandhi Jayanti,HOLIDAY,true
+2026-10-19,Pre-Dussehra Preparation Day,EVENT,false
+2026-10-20,Dussehra Festival,HOLIDAY,true
+2026-10-26,Maharishi Valmiki Jayanti,HOLIDAY,true
+2026-11-08,Diwali Festival,HOLIDAY,true
+2026-11-09,Govardhan Puja,HOLIDAY,true
+2026-11-24,Guru Nanak Jayanti,HOLIDAY,true
+2026-11-25,Midterm Examination Start,EXAM,false
+2024-10-02,Gandhi Jayanti,HOLIDAY,true
+2024-10-12,Dussehra Festival,HOLIDAY,true
+2024-10-25,Pre-Diwali Preparation Friday,EVENT,false
+2024-10-31,Diwali Festival,HOLIDAY,true
+2024-11-01,Govardhan Puja,HOLIDAY,true
+2024-11-15,Guru Nanak Jayanti,HOLIDAY,true
+2024-11-25,Midterm Examination Start,EXAM,false
