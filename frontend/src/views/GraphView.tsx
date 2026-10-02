@@ -43,6 +43,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('Hierarchical');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [delinquentsOnly, setDelinquentsOnly] = useState<boolean>(false);
+  const [studentConnectivityEnabled, setStudentConnectivityEnabled] = useState<boolean>(false);
 
   // Edge Type Filter: Rule 1: By default ONLY Hierarchical and Aggregates are shown!
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeTypeKey>>(
@@ -393,6 +394,28 @@ export const GraphView: React.FC<GraphViewProps> = ({
               <span>{delinquentCount} Delinquents</span>
             </button>
           )}
+
+          {/* Student Connectivity Option */}
+          <button
+            onClick={() => setStudentConnectivityEnabled(!studentConnectivityEnabled)}
+            className={`inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+              studentConnectivityEnabled
+                ? 'bg-primary text-on-primary border-primary shadow-primary/25'
+                : 'bg-surface-container-low text-on-surface-variant border-outline-variant/80 hover:text-on-surface hover:bg-surface-container'
+            }`}
+            title="Toggle Student Connectivity"
+          >
+            <span
+              className="material-symbols-outlined text-[15px]"
+              style={{ fontVariationSettings: studentConnectivityEnabled ? "'FILL' 1" : "'FILL' 0" }}
+            >
+              connect_without_contact
+            </span>
+            <span>Student Connectivity</span>
+            {studentConnectivityEnabled && (
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            )}
+          </button>
         </div>
 
         {/* Right: Controls & Search */}
@@ -526,6 +549,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             layoutMode={layoutMode}
             zoomScale={zoomScale}
             onZoomChange={setZoomScale}
+            studentConnectivityEnabled={studentConnectivityEnabled}
           />
         </div>
 

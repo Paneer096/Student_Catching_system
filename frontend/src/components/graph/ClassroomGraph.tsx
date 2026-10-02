@@ -17,6 +17,7 @@ export interface ClassroomGraphProps {
   searchFilter?: string;
   zoomScale: number;
   onZoomChange: (scale: number) => void;
+  studentConnectivityEnabled?: boolean;
 }
 
 export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
@@ -32,6 +33,7 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
   searchFilter = '',
   zoomScale,
   onZoomChange,
+  studentConnectivityEnabled = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 900, height: 600 });
@@ -432,56 +434,83 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
                   strokeWidth={focusStyle.strokeWidth}
                 />
 
-                {/* Inside Node Icon / Initials */}
+                {/* Inside Node Icon (Section, Cluster, Teacher, Club) / Initials (Student Only) */}
                 {node.kind === 'section' && (
                   <text
                     textAnchor="middle"
-                    dy="5"
+                    dominantBaseline="central"
                     fill="#f8fafc"
-                    fontSize="13"
-                    fontFamily="monospace"
-                    fontWeight="extrabold"
+                    fontSize="18"
+                    fontFamily="Material Symbols Outlined"
+                    style={{ userSelect: 'none' }}
                   >
-                    {node.data?.code || 'SEC'}
+                    domain
                   </text>
                 )}
 
                 {node.kind === 'cluster' && (
                   <text
                     textAnchor="middle"
-                    dy="4"
+                    dominantBaseline="central"
                     fill="#f8fafc"
-                    fontSize={node.radius > 32 ? '13' : '11'}
-                    fontFamily="monospace"
-                    fontWeight="bold"
+                    fontSize={node.radius > 25 ? '16' : '14'}
+                    fontFamily="Material Symbols Outlined"
+                    style={{ userSelect: 'none' }}
                   >
-                    {node.data?.member_count || ''}
-                  </text>
-                )}
-
-                {node.kind === 'student' && (
-                  <text
-                    textAnchor="middle"
-                    dy="3.5"
-                    fill="#f8fafc"
-                    fontSize={node.radius > 11 ? '9' : '8'}
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    {node.initials || 'ST'}
+                    groups
                   </text>
                 )}
 
                 {node.kind === 'teacher' && (
                   <text
                     textAnchor="middle"
-                    dy="4"
+                    dominantBaseline="central"
                     fill="#93c5fd"
-                    fontSize="10"
+                    fontSize="14"
+                    fontFamily="Material Symbols Outlined"
+                    style={{ userSelect: 'none' }}
+                  >
+                    person
+                  </text>
+                )}
+
+                {node.kind === 'club' && (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#f1f5f9"
+                    fontSize="13"
+                    fontFamily="Material Symbols Outlined"
+                    style={{ userSelect: 'none' }}
+                  >
+                    local_activity
+                  </text>
+                )}
+
+                {node.kind === 'subject' && (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#cbd5e1"
+                    fontSize="12"
+                    fontFamily="Material Symbols Outlined"
+                    style={{ userSelect: 'none' }}
+                  >
+                    menu_book
+                  </text>
+                )}
+
+                {node.kind === 'student' && (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#f8fafc"
+                    fontSize={node.radius > 11 ? '8.5' : '7.5'}
                     fontFamily="monospace"
                     fontWeight="bold"
+                    style={{ userSelect: 'none' }}
                   >
-                    FA
+                    {node.initials || 'ST'}
                   </text>
                 )}
 
@@ -611,7 +640,11 @@ export const ClassroomGraph: React.FC<ClassroomGraphProps> = ({
       {/* Navigation Helper Indicator in Canvas Corner */}
       <div className="absolute bottom-3 left-3 pointer-events-none text-[10px] font-mono text-on-surface-variant/70 bg-surface-container-lowest/80 px-2 py-1 rounded-md border border-outline-variant/40 flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-        <span>Drag to pan · Scroll to semantic zoom · Click cluster to expand</span>
+        <span>
+          {studentConnectivityEnabled
+            ? 'Student Connectivity Mode: Enabled'
+            : 'Drag to pan · Scroll to zoom · Click cluster to expand'}
+        </span>
       </div>
     </div>
   );
