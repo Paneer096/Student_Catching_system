@@ -10,10 +10,15 @@ from __future__ import annotations
 import math
 from typing import Any
 import networkx as nx
+from networkx.algorithms.community import louvain_communities
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.orm import Student, Attendance, Section, Teacher
+from app.models.orm import (
+    Student, Attendance, Section, Teacher, Subject,
+    Club, ClubMembership, Observation, SurveyResponse,
+    Intervention, InterventionStudent
+)
 from app.config.settings import get_thresholds
 
 
@@ -579,3 +584,533 @@ async def get_student_dossier(db: AsyncSession, roll_no: str) -> dict[str, Any] 
             for r in records[:15]
         ],
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NEW HIERARCHICAL LAYERED KNOWLEDGE GRAPH ARCHITECTURE
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def build_hierarchical_graph(db: AsyncSession, section_code: str = "CS-3B") -> dict[str, Any]:
+    """
+    Constructs multi-level hierarchical knowledge graph per specification:
+    - Layer 0: Institution & Sections overview
+    - Layer 1: Section landing with Louvain community clusters + Teachers + Clubs
+    - Layer 2: Cluster expansion into student nodes
+    - Layer 3: Student deep-focus with semantic relationships
+    """
+    # 1. Fetch all sections for Layer 0 Institution View
+    all_sec_res = await db.execute(select(Section).order_by(Section.code.asc()))
+    all_sections = list(all_sec_res.scalars().all())
+
+    # 2. Target Section
+    sec_stmt = select(Section).where(Section.code == section_code)
+    sec_res = await db.execute(sec_stmt)
+    section = sec_res.scalar_one_or_none()
+    if not section and all_sections:
+        section = all_sections[0]
+        section_code = section.code
+
+    if not section:
+        return {
+            "institution": {"id": "inst-root", "name": "Engineering College", "sections": []},
+            "section": {"code": section_code, "name": f"Section {section_code}", "student_count": 0},
+            "clusters": [],
+            "teachers": [],
+            "clubs": [],
+            "subjects": [],
+            "edges": [],
+            "aggregate_edges": [],
+        }
+
+    # 3. Fetch Students
+    stud_stmt = select(Student).where(Student.section_id == section.id).order_by(Student.roll_no.asc())
+    stud_res = await db.execute(stud_stmt)
+    students = list(stud_res.scalars().all())
+    student_map = {s.id: s for s in students}
+    student_ids = list(student_map.keys())
+
+    # 4. Fetch Attendance records
+    att_stmt = select(Attendance).where(Attendance.student_id.in_(student_ids))
+    att_res = await db.execute(att_stmt)
+    attendance_records = list(att_res.scalars().all())
+
+    attendance_stats: dict[str, dict[str, int]] = {s.id: {"total": 0, "present": 0, "absent": 0} for s in students}
+    session_absentees: dict[tuple[Any, int], list[str]] = {}
+    for a in attendance_records:
+        sid = a.student_id
+        if sid in attendance_stats:
+            attendance_stats[sid]["total"] += 1
+            if a.status in ("PRESENT", "LATE"):
+                attendance_stats[sid]["present"] += 1
+            elif a.status == "ABSENT":
+                attendance_stats[sid]["absent"] += 1
+                session_absentees.setdefault((a.date, a.period), []).append(sid)
+
+    # 5. Fetch Survey Relationships (FRIENDS_WITH, STUDIES_WITH)
+    survey_stmt = select(SurveyResponse).where(
+        SurveyResponse.student_id.in_(student_ids),
+        SurveyResponse.target_id.in_(student_ids)
+    )
+    survey_res = await db.execute(survey_stmt)
+    surveys = list(survey_res.scalars().all())
+
+    # 6. Fetch Clubs & Memberships
+    club_mem_stmt = select(ClubMembership, Club).join(Club, ClubMembership.club_id == Club.id).where(
+        ClubMembership.student_id.in_(student_ids)
+    )
+    club_mem_res = await db.execute(club_mem_stmt)
+    student_clubs: dict[str, list[dict[str, str]]] = {s.id: [] for s in students}
+    all_clubs_map: dict[str, dict[str, Any]] = {}
+    for cm, c in club_mem_res.all():
+        student_clubs[cm.student_id].append({"id": c.id, "name": c.name})
+        if c.id not in all_clubs_map:
+            all_clubs_map[c.id] = {"id": c.id, "name": c.name, "member_count": 0}
+        all_clubs_map[c.id]["member_count"] += 1
+
+    # 7. Fetch Teachers
+    teacher_stmt = select(Teacher).limit(5)
+    t_res = await db.execute(teacher_stmt)
+    teachers = list(t_res.scalars().all())
+    teacher_list = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "role": "Class Teacher" if t.id == section.class_teacher_id else "Subject Faculty",
+            "department": t.department
+        }
+        for t in teachers
+    ]
+
+    # 8. Fetch Teacher Observations (TAGGED_AS)
+    obs_stmt = select(Observation).where(Observation.student_id.in_(student_ids))
+    obs_res = await db.execute(obs_stmt)
+    observations = list(obs_res.scalars().all())
+
+    # 9. Build NetworkX Graph for Metrics & Louvain Detection
+    G = nx.Graph()
+    for s in students:
+        G.add_node(s.id, roll_no=s.roll_no, name=s.name)
+
+    # Add co-absence weights
+    co_abs_counts: dict[tuple[str, str], int] = {}
+    for (d, p), slist in session_absentees.items():
+        if len(slist) > 1:
+            for i in range(len(slist)):
+                for j in range(i + 1, len(slist)):
+                    u, v = sorted([slist[i], slist[j]])
+                    co_abs_counts[(u, v)] = co_abs_counts.get((u, v), 0) + 1
+
+    for (u, v), count in co_abs_counts.items():
+        if G.has_edge(u, v):
+            G[u][v]["weight"] += count
+        else:
+            G.add_edge(u, v, weight=count)
+
+    # Add survey friendship weights
+    for s_resp in surveys:
+        u, v = sorted([s_resp.student_id, s_resp.target_id])
+        w = 3 if s_resp.relation == "FRIEND" else 2
+        if G.has_edge(u, v):
+            G[u][v]["weight"] += w
+        else:
+            G.add_edge(u, v, weight=w)
+
+    # Calculate Centrality
+    if len(G.edges) > 0:
+        try:
+            pagerank = nx.pagerank(G, weight="weight")
+        except Exception:
+            pagerank = {n: 1.0 / max(1, len(G)) for n in G.nodes}
+        try:
+            betweenness = nx.betweenness_centrality(G, weight="weight")
+        except Exception:
+            betweenness = {n: 0.0 for n in G.nodes}
+    else:
+        pagerank = {n: 0.0 for n in G.nodes}
+        betweenness = {n: 0.0 for n in G.nodes}
+
+    # Louvain Community Detection with deterministic seed
+    if len(G.edges) > 0:
+        try:
+            communities_raw = louvain_communities(G, weight="weight", seed=42)
+        except Exception:
+            communities_raw = [set(G.nodes)]
+    else:
+        # Fallback grouping
+        communities_raw = [set(students[i:i + 10]) for i in range(0, len(students), 10)]
+
+    # Sort communities by size descending
+    sorted_communities = sorted(communities_raw, key=lambda c: len(c), reverse=True)
+
+    # Cluster Cap: If > 8 clusters, merge small singletons into an "Other / Peripheral Circle"
+    final_communities: list[set[str]] = []
+    other_community: set[str] = set()
+    for idx, comm in enumerate(sorted_communities):
+        if idx < 7 and len(comm) >= 2:
+            final_communities.append(comm)
+        else:
+            other_community.update(comm)
+    if other_community:
+        final_communities.append(other_community)
+
+    # 10. Construct Student Details & Classifications
+    student_details: dict[str, dict[str, Any]] = {}
+    for s in students:
+        stats = attendance_stats[s.id]
+        tot = stats["total"]
+        pct = round((stats["present"] / tot * 100), 1) if tot > 0 else 100.0
+        absences = stats["absent"]
+        bw = round(betweenness.get(s.id, 0.0), 3)
+        pr = round(pagerank.get(s.id, 0.0), 4)
+
+        # Classification
+        if absences >= 8 or pct < 65.0:
+            classification = "high_concern"
+            risk_color = "#ef4444"
+            risk_level = "CRITICAL"
+        elif absences >= 5 or pct < 75.0:
+            classification = "at_risk"
+            risk_color = "#f97316"
+            risk_level = "HIGH"
+        elif absences >= 3 or pct < 85.0:
+            classification = "watch"
+            risk_color = "#eab308"
+            risk_level = "MEDIUM"
+        else:
+            classification = "good_standing"
+            risk_color = "#10b981"
+            risk_level = "LOW"
+
+        # Check special attributes
+        is_anchor = bw > 0.08
+        if is_anchor and classification in ("high_concern", "at_risk"):
+            role_title = "Absence Anchor / Key Influencer"
+        elif is_anchor:
+            role_title = "Cohort Anchor / Coordinator"
+        elif s.roll_no == "21CSB001":
+            role_title = "Class Representative (CR)"
+            classification = "good_standing"
+            risk_color = "#10b981"
+        else:
+            role_title = "Student Member"
+
+        student_details[s.id] = {
+            "id": s.id,
+            "roll_no": s.roll_no,
+            "name": s.name,
+            "gender": s.gender or "M",
+            "attendance_pct": pct,
+            "total_classes": tot,
+            "absences": absences,
+            "classification": classification,
+            "risk_color": risk_color,
+            "risk_level": risk_level,
+            "role": role_title,
+            "betweenness": bw,
+            "pagerank": pr,
+            "is_delinquent": absences >= 4,
+            "clubs": [c["name"] for c in student_clubs.get(s.id, [])],
+        }
+
+    # 11. Build Cluster Nodes & Assign Student Cluster IDs
+    cluster_nodes: list[dict[str, Any]] = []
+    student_cluster_map: dict[str, str] = {}
+
+    for c_idx, comm_set in enumerate(final_communities):
+        cid = f"cluster-{c_idx + 1}"
+        c_students = [student_details[sid] for sid in comm_set if sid in student_details]
+        for sid in comm_set:
+            student_cluster_map[sid] = cid
+
+        if not c_students:
+            continue
+
+        c_absences = sum(cs["absences"] for cs in c_students)
+        c_avg_att = round(sum(cs["attendance_pct"] for cs in c_students) / len(c_students), 1)
+        c_at_risk_count = sum(1 for cs in c_students if cs["classification"] in ("high_concern", "at_risk"))
+        c_anchor_count = sum(1 for cs in c_students if cs["betweenness"] > 0.05)
+
+        # Risk level of cluster
+        risk_ratio = c_at_risk_count / len(c_students)
+        if risk_ratio >= 0.35:
+            agg_risk = "HIGH"
+            cluster_color = "#ef4444"
+            cluster_name = f"Friend Circle {c_idx + 1} (High-Risk Delinquency)"
+        elif risk_ratio >= 0.18:
+            agg_risk = "MEDIUM"
+            cluster_color = "#f97316"
+            cluster_name = f"Friend Circle {c_idx + 1} (Moderate Watch)"
+        elif c_avg_att >= 90.0:
+            agg_risk = "LOW"
+            cluster_color = "#10b981"
+            cluster_name = f"Friend Circle {c_idx + 1} (Study Circle Alpha)"
+        else:
+            agg_risk = "LOW"
+            cluster_color = "#06b6d4"
+            cluster_name = f"Friend Circle {c_idx + 1} (Peer Clique)"
+
+        cluster_nodes.append({
+            "id": cid,
+            "cluster_idx": c_idx + 1,
+            "name": cluster_name,
+            "member_count": len(c_students),
+            "aggregate_risk": agg_risk,
+            "risk_color": cluster_color,
+            "avg_attendance": c_avg_att,
+            "at_risk_count": c_at_risk_count,
+            "anchor_count": c_anchor_count,
+            "dominant_classification": f"{len(c_students)} members · {c_at_risk_count} at-risk · {c_anchor_count} anchors",
+            "members": c_students,
+        })
+
+    # 12. Build Granular Edges (Hierarchical + Typed Edges)
+    all_edges: list[dict[str, Any]] = []
+
+    # 12.1 Hierarchical Edges: Section -> Clusters
+    for cn in cluster_nodes:
+        all_edges.append({
+            "source": f"section-{section.code}",
+            "target": cn["id"],
+            "type": "HIERARCHICAL",
+            "weight": 5,
+            "color": "#64748b",
+            "label": "Contains Cluster",
+        })
+        # Cluster -> Member Students
+        for m in cn["members"]:
+            all_edges.append({
+                "source": cn["id"],
+                "target": m["id"],
+                "type": "HIERARCHICAL",
+                "weight": 2,
+                "color": "#64748b",
+                "label": "Member",
+            })
+
+    # 12.2 Typed Relationships:
+    # FRIENDS_WITH
+    for resp in surveys:
+        if resp.relation == "FRIEND":
+            all_edges.append({
+                "source": resp.student_id,
+                "target": resp.target_id,
+                "type": "FRIENDS_WITH",
+                "weight": 3,
+                "color": "#4ade80",
+                "label": "Friends",
+            })
+        elif resp.relation in ("STUDY_PARTNER", "SITS_WITH"):
+            all_edges.append({
+                "source": resp.student_id,
+                "target": resp.target_id,
+                "type": "STUDIES_WITH",
+                "weight": 3,
+                "color": "#3b82f6",
+                "label": "Studies With",
+            })
+
+    # BUNKS_WITH (Co-absences >= 2)
+    for (u, v), cnt in co_abs_counts.items():
+        if cnt >= 2:
+            all_edges.append({
+                "source": u,
+                "target": v,
+                "type": "BUNKS_WITH",
+                "weight": cnt,
+                "color": "#ef4444",
+                "label": f"{cnt}x Co-absences",
+            })
+
+    # TAGGED_AS (Teacher Observations)
+    for obs in observations:
+        all_edges.append({
+            "source": obs.teacher_id,
+            "target": obs.student_id,
+            "type": "TAGGED_AS",
+            "weight": 2,
+            "color": "#f59e0b",
+            "label": f"Flag: {obs.category}",
+        })
+
+    # MEMBER_OF (Student -> Club)
+    for sid, clubs in student_clubs.items():
+        for cl in clubs:
+            all_edges.append({
+                "source": sid,
+                "target": cl["id"],
+                "type": "MEMBER_OF",
+                "weight": 1,
+                "color": "#06b6d4",
+                "label": f"Member of {cl['name']}",
+            })
+
+    # 13. Aggregate Edges between Clusters
+    cross_cluster_counts: dict[tuple[str, str], int] = {}
+    for edge in all_edges:
+        if edge["type"] in ("FRIENDS_WITH", "BUNKS_WITH", "STUDIES_WITH"):
+            u_cid = student_cluster_map.get(edge["source"])
+            v_cid = student_cluster_map.get(edge["target"])
+            if u_cid and v_cid and u_cid != v_cid:
+                pair = tuple(sorted([u_cid, v_cid]))
+                cross_cluster_counts[pair] = cross_cluster_counts.get(pair, 0) + 1
+
+    aggregate_edges = []
+    for (c1, c2), count in cross_cluster_counts.items():
+        aggregate_edges.append({
+            "source": c1,
+            "target": c2,
+            "type": "AGGREGATE_CROSS_CLUSTER",
+            "weight": count,
+            "count": count,
+            "label": f"{count} cross-circle ties",
+            "color": "#94a3b8",
+        })
+
+    # 14. Assemble Response
+    sec_presents = sum(stats["present"] for stats in attendance_stats.values())
+    sec_totals = sum(stats["total"] for stats in attendance_stats.values())
+    sec_avg = round((sec_presents / sec_totals * 100), 1) if sec_totals > 0 else 100.0
+
+    return {
+        "institution": {
+            "id": "node-college",
+            "name": "College of Engineering & Technology",
+            "sections": [
+                {
+                    "id": s.id,
+                    "code": s.code,
+                    "name": f"Section {s.code}",
+                    "department": s.department,
+                    "semester": s.semester,
+                    "strength": s.strength,
+                }
+                for s in all_sections
+            ],
+        },
+        "section": {
+            "id": f"section-{section.code}",
+            "code": section.code,
+            "name": f"Section {section.code}",
+            "department": section.department,
+            "semester": section.semester,
+            "student_count": len(students),
+            "avg_attendance": sec_avg,
+            "class_teacher": teacher_list[0]["name"] if teacher_list else "Faculty Incharge",
+        },
+        "clusters": cluster_nodes,
+        "teachers": teacher_list,
+        "clubs": list(all_clubs_map.values()),
+        "subjects": [
+            {"code": "CS301", "name": "Data Structures", "credits": 4},
+            {"code": "CS302", "name": "Operating Systems", "credits": 4},
+            {"code": "CS303", "name": "Database Systems", "credits": 3},
+            {"code": "CS304", "name": "Computer Networks", "credits": 3},
+            {"code": "MAT201", "name": "Discrete Mathematics", "credits": 3},
+        ],
+        "edges": all_edges,
+        "aggregate_edges": aggregate_edges,
+        "summary": {
+            "total_students": len(students),
+            "clusters_count": len(cluster_nodes),
+            "total_edges": len(all_edges),
+            "delinquents_count": sum(1 for sd in student_details.values() if sd["is_delinquent"]),
+        },
+    }
+
+
+async def get_student_neighbors_subgraph(
+    db: AsyncSession,
+    roll_no: str,
+    depth: int = 2,
+    edge_types: list[str] | None = None
+) -> dict[str, Any] | None:
+    """
+    Returns radial subgraph centered on a single student for Layer 3 deep dive:
+    - Center: Target student
+    - Ring 1: Direct 1st-degree neighbors
+    - Ring 2: 2nd-degree neighbors (ghosted)
+    """
+    stmt = select(Student).where(Student.roll_no == roll_no)
+    res = await db.execute(stmt)
+    student = res.scalar_one_or_none()
+    if not student:
+        return None
+
+    # Load whole section graph
+    sec_stmt = select(Section).where(Section.id == student.section_id)
+    sec_res = await db.execute(sec_stmt)
+    section = sec_res.scalar_one_or_none()
+    sec_code = section.code if section else "CS-3B"
+
+    full_graph = await build_hierarchical_graph(db, sec_code)
+
+    # Filter edges by allowed types
+    allowed_types = set(edge_types) if edge_types else {
+        "FRIENDS_WITH", "BUNKS_WITH", "STUDIES_WITH", "TAGGED_AS", "MEMBER_OF"
+    }
+
+    relevant_edges = [
+        e for e in full_graph["edges"]
+        if e["type"] in allowed_types
+    ]
+
+    # Find 1st degree neighbors
+    ring1_ids: set[str] = set()
+    for e in relevant_edges:
+        if e["source"] == student.id:
+            ring1_ids.add(e["target"])
+        elif e["target"] == student.id:
+            ring1_ids.add(e["source"])
+
+    # Find 2nd degree neighbors
+    ring2_ids: set[str] = set()
+    if depth >= 2:
+        for e in relevant_edges:
+            if e["source"] in ring1_ids and e["target"] != student.id and e["target"] not in ring1_ids:
+                ring2_ids.add(e["target"])
+            elif e["target"] in ring1_ids and e["source"] != student.id and e["source"] not in ring1_ids:
+                ring2_ids.add(e["source"])
+
+    # Collect node objects
+    all_node_ids = {student.id} | ring1_ids | (ring2_ids if depth >= 2 else set())
+
+    # Map student items
+    subgraph_nodes = []
+    # Check students inside clusters
+    for cl in full_graph["clusters"]:
+        for m in cl["members"]:
+            if m["id"] in all_node_ids:
+                dist = 0 if m["id"] == student.id else (1 if m["id"] in ring1_ids else 2)
+                subgraph_nodes.append({
+                    **m,
+                    "distance": dist,
+                    "is_ghost": dist == 2,
+                    "cluster_id": cl["id"],
+                    "cluster_name": cl["name"],
+                })
+
+    # Subgraph edges
+    subgraph_edges = [
+        e for e in relevant_edges
+        if e["source"] in all_node_ids and e["target"] in all_node_ids
+    ]
+
+    return {
+        "target_student": student_details_lookup(full_graph, student.id),
+        "rings": {
+            "center": [student.id],
+            "ring1": list(ring1_ids),
+            "ring2": list(ring2_ids),
+        },
+        "nodes": subgraph_nodes,
+        "edges": subgraph_edges,
+    }
+
+
+def student_details_lookup(graph_data: dict[str, Any], student_id: str) -> dict[str, Any] | None:
+    for cl in graph_data.get("clusters", []):
+        for m in cl.get("members", []):
+            if m["id"] == student_id:
+                return m
+    return None
+

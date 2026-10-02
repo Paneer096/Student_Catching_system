@@ -94,6 +94,113 @@ export interface GraphEdge {
   label?: string;
 }
 
+export interface HierarchicalStudent {
+  id: string;
+  roll_no: string;
+  name: string;
+  gender: string;
+  attendance_pct: number;
+  total_classes: number;
+  absences: number;
+  classification: 'high_concern' | 'at_risk' | 'watch' | 'good_standing' | 'dual_influence' | 'isolated';
+  risk_color: string;
+  risk_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  role: string;
+  betweenness: number;
+  pagerank: number;
+  is_delinquent: boolean;
+  clubs?: string[];
+  distance?: number;
+  is_ghost?: boolean;
+  cluster_id?: string;
+  cluster_name?: string;
+}
+
+export interface ClusterNode {
+  id: string;
+  cluster_idx: number;
+  name: string;
+  member_count: number;
+  aggregate_risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'WATCH' | 'GOOD';
+  risk_color: string;
+  avg_attendance: number;
+  at_risk_count: number;
+  anchor_count: number;
+  dominant_classification: string;
+  members: HierarchicalStudent[];
+}
+
+export interface HierarchicalEdge {
+  source: string;
+  target: string;
+  type: 'HIERARCHICAL' | 'FRIENDS_WITH' | 'BUNKS_WITH' | 'STUDIES_WITH' | 'TAGGED_AS' | 'INTERVENED_ON' | 'MEMBER_OF' | 'ATTENDS' | 'AGGREGATE_CROSS_CLUSTER';
+  weight: number;
+  color?: string;
+  label?: string;
+  count?: number;
+}
+
+export interface HierarchicalGraphData {
+  institution: {
+    id: string;
+    name: string;
+    sections: Array<{
+      id: string;
+      code: string;
+      name: string;
+      department: string;
+      semester: number;
+      strength: number;
+    }>;
+  };
+  section: {
+    id: string;
+    code: string;
+    name: string;
+    department: string;
+    semester: number;
+    student_count: number;
+    avg_attendance: number;
+    class_teacher?: string;
+  };
+  clusters: ClusterNode[];
+  teachers: Array<{
+    id: string;
+    name: string;
+    role: string;
+    department: string;
+  }>;
+  clubs: Array<{
+    id: string;
+    name: string;
+    member_count: number;
+  }>;
+  subjects: Array<{
+    code: string;
+    name: string;
+    credits: number;
+  }>;
+  edges: HierarchicalEdge[];
+  aggregate_edges: HierarchicalEdge[];
+  summary: {
+    total_students: number;
+    clusters_count: number;
+    total_edges: number;
+    delinquents_count: number;
+  };
+}
+
+export interface StudentNeighborsSubgraph {
+  target_student: HierarchicalStudent | null;
+  rings: {
+    center: string[];
+    ring1: string[];
+    ring2: string[];
+  };
+  nodes: HierarchicalStudent[];
+  edges: HierarchicalEdge[];
+}
+
 export interface StudentDossier {
   id: string;
   roll_no: string;
@@ -343,6 +450,26 @@ class ApiClient {
 
   async getDashboardSummary(section = 'CS-3B'): Promise<DashboardSummary> {
     return this.request<DashboardSummary>(`/dashboard/summary?section=${encodeURIComponent(section)}`);
+  }
+
+  async getGraphHierarchy(section = 'CS-3B'): Promise<HierarchicalGraphData> {
+    return this.request<HierarchicalGraphData>(`/graph/hierarchy?section=${encodeURIComponent(section)}`);
+  }
+
+  async getGraphClusters(section = 'CS-3B'): Promise<{ section: any; clusters: ClusterNode[]; summary: any }> {
+    return this.request(`/graph/clusters/${encodeURIComponent(section)}`);
+  }
+
+  async getStudentNeighbors(rollNo: string, depth = 2, edgeTypes?: string[]): Promise<StudentNeighborsSubgraph> {
+    const params = new URLSearchParams({ depth: String(depth) });
+    if (edgeTypes && edgeTypes.length > 0) {
+      params.append('edge_types', edgeTypes.join(','));
+    }
+    return this.request<StudentNeighborsSubgraph>(`/graph/student/${encodeURIComponent(rollNo)}/neighbors?${params.toString()}`);
+  }
+
+  async getAggregateEdges(section = 'CS-3B'): Promise<{ section: any; aggregate_edges: HierarchicalEdge[] }> {
+    return this.request(`/graph/aggregate-edges?section=${encodeURIComponent(section)}`);
   }
 
   async getGraphNodes(section = 'CS-3B'): Promise<{
