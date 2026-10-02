@@ -22,13 +22,13 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'students', label: 'Students (Roster)', icon: 'groups' },
     { id: 'graph', label: 'Network Analysis', icon: 'hub' },
     { id: 'ingestion', label: 'Data Ingestion', icon: 'upload_file' },
-    { id: 'alerts', label: 'Classroom Alerts', icon: 'notifications_active', badge: unreadAlertsCount },
     { id: 'interventions', label: 'Interventions (Cases)', icon: 'folder_open' },
-    { id: 'students', label: 'Students (Roster)', icon: 'groups' },
     { id: 'calendar', label: 'Calendar Risk', icon: 'calendar_month' },
     { id: 'audit', label: 'Audit & Trust Log', icon: 'verified_user' },
+    { id: 'alerts', label: 'Classroom Alerts', icon: 'notifications_active', badge: unreadAlertsCount },
   ];
 
   return (
