@@ -29,7 +29,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, synonym
 
 
 def generate_uuid() -> str:
@@ -291,13 +291,9 @@ class SurveyNomination(Base):
         UniqueConstraint("wave_id", "nominator_id", "nominee_id", "kind", name="uq_survey_nomination"),
     )
 
-    @property
-    def student_id(self) -> str:
-        return self.nominator_id
-
-    @property
-    def target_id(self) -> str:
-        return self.nominee_id
+    student_id = synonym("nominator_id")
+    target_id = synonym("nominee_id")
+    relation = synonym("kind")
 
 
 # Backward compatibility alias
