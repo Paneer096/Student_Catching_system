@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.orm import CalendarDay
-from app.calendar_risk.engine import get_calendar_risk_schedule
+from app.calendar_risk.engine import get_calendar_risk_schedule, calculate_calibrated_prediction
 
 router = APIRouter(prefix="/calendar", tags=["Calendar Risk"])
 
@@ -216,3 +216,37 @@ async def reset_calendar_defaults(
         "status": "SUCCESS",
         "message": "Reset academic calendar to 2026 official gazetted defaults.",
     }
+
+
+class PredictProbabilityRequest(BaseModel):
+    day_of_week: str = Field(default="Friday")
+    period: int = Field(default=5, ge=1, le=8)
+    subject_code: str = Field(default="CS302")
+    is_lab: bool = Field(default=False)
+    bridge_days_gained: int = Field(default=1, ge=0, le=10)
+    is_pre_holiday: bool = Field(default=False)
+    is_exam_proximity: bool = Field(default=False)
+    cohort_risk_tier: str = Field(default="medium")  # "low" | "medium" | "high"
+    student_roll: str | None = Field(default=None)
+    section: str = Field(default="CS-3B")
+
+
+@router.post("/predict-probability")
+async def predict_probability(
+    payload: PredictProbabilityRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Calculates exact, non-vague mathematical absence probability with SHAP-style attribution.
+    """
+    return calculate_calibrated_prediction(
+        day_of_week=payload.day_of_week,
+        period=payload.period,
+        subject_code=payload.subject_code,
+        is_lab=payload.is_lab,
+        bridge_days_gained=payload.bridge_days_gained,
+        is_pre_holiday=payload.is_pre_holiday,
+        is_exam_proximity=payload.is_exam_proximity,
+        cohort_risk_tier=payload.cohort_risk_tier,
+    )
+

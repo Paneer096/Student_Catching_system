@@ -24,10 +24,10 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'students', label: 'Students (Roster)', icon: 'groups' },
     { id: 'graph', label: 'Network Analysis', icon: 'hub' },
+    { id: 'knowledge-graph', label: 'Knowledge Graph', icon: 'account_tree' },
     { id: 'calendar', label: 'Calendar Risk', icon: 'calendar_month' },
     { id: 'ingestion', label: 'Data Ingestion', icon: 'upload_file' },
     { id: 'interventions', label: 'Interventions (Cases)', icon: 'folder_open' },
-    { id: 'audit', label: 'Audit & Trust Log', icon: 'verified_user' },
     { id: 'alerts', label: 'Classroom Alerts', icon: 'notifications_active', badge: unreadAlertsCount },
   ];
 

@@ -41,7 +41,7 @@ export const RoleSwitcherModal: React.FC<RoleSwitcherModalProps> = ({
       name: 'Prof. Vikram Kapoor',
       roleTitle: 'HOD / Academic Dean',
       clearance: 'Executive Institutional Level',
-      description: 'High-level department summaries, mass bunk trends across sections, calendar hazards, and audit logs.',
+      description: 'High-level department summaries, attendance trends across sections, and calendar risk forecasting.',
       badge: 'Dean Access',
     },
     {

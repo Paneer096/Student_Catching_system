@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@types/cytoscape": "^3.21.9",
+    "@types/d3-force": "^3.0.10",
     "cytoscape": "^3.34.3",
     "cytoscape-fcose": "^2.2.0",
+    "d3-force": "^3.0.0",
     "lucide-react": "^1.37.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

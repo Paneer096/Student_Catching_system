@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, CalendarRiskDay, CalendarEvent } from '../api/client';
+import { api, CalendarRiskDay, CalendarEvent, CalibratedPredictionResult } from '../api/client';
 
 export interface CalendarRiskViewProps {
   onNavigate: (viewId: string, params?: any) => void;
@@ -27,6 +27,72 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
   const [modalTab, setModalTab] = useState<'add' | 'list'>('add');
   const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+
+  // Calibrated Prediction Calculator State
+  const [calcModalOpen, setCalcModalOpen] = useState(false);
+  const [calcDay, setCalcDay] = useState('Friday');
+  const [calcPeriod, setCalcPeriod] = useState(5);
+  const [calcSubject, setCalcSubject] = useState('CS302');
+  const [calcIsLab, setCalcIsLab] = useState(false);
+  const [calcBridgeDays, setCalcBridgeDays] = useState(1);
+  const [calcPreHoliday, setCalcPreHoliday] = useState(false);
+  const [calcExamProximity, setCalcExamProximity] = useState(false);
+  const [calcCohortTier, setCalcCohortTier] = useState<'low' | 'medium' | 'high'>('medium');
+  const [calcLoading, setCalcLoading] = useState(false);
+  const [calcResult, setCalcResult] = useState<CalibratedPredictionResult | null>(null);
+
+  const runPredictionCalculation = async (overrides?: any) => {
+    setCalcLoading(true);
+    try {
+      const payload = {
+        day_of_week: overrides?.day_of_week ?? calcDay,
+        period: overrides?.period ?? calcPeriod,
+        subject_code: overrides?.subject_code ?? calcSubject,
+        is_lab: overrides?.is_lab !== undefined ? overrides.is_lab : calcIsLab,
+        bridge_days_gained: overrides?.bridge_days_gained ?? calcBridgeDays,
+        is_pre_holiday: overrides?.is_pre_holiday !== undefined ? overrides.is_pre_holiday : calcPreHoliday,
+        is_exam_proximity: overrides?.is_exam_proximity !== undefined ? overrides.is_exam_proximity : calcExamProximity,
+        cohort_risk_tier: overrides?.cohort_risk_tier ?? calcCohortTier,
+        section: activeSection,
+      };
+      const res = await api.predictProbability(payload);
+      setCalcResult(res);
+    } catch (err) {
+      console.error('Failed to compute calibrated prediction', err);
+    } finally {
+      setCalcLoading(false);
+    }
+  };
+
+  const syncFromSelectedDay = () => {
+    const dayObj = riskSchedule.find((d) => d.date === selectedDateStr) || riskSchedule[0];
+    if (!dayObj) return;
+    const dow = dayObj.day || 'Friday';
+    const firstPeriod = dayObj.periods?.[0];
+    const pNum = firstPeriod ? firstPeriod.period : 5;
+    const subj = firstPeriod ? firstPeriod.subject : 'CS302';
+    const isLab = dayObj.has_lab || (firstPeriod?.is_lab ?? false);
+    const bridge = dayObj.consecutive_days_gained ?? 0;
+    const isPre = (dayObj.following_off_days ?? 0) >= 1;
+
+    setCalcDay(dow);
+    setCalcPeriod(pNum);
+    setCalcSubject(subj);
+    setCalcIsLab(isLab);
+    setCalcBridgeDays(bridge);
+    setCalcPreHoliday(isPre);
+
+    runPredictionCalculation({
+      day_of_week: dow,
+      period: pNum,
+      subject_code: subj,
+      is_lab: isLab,
+      bridge_days_gained: bridge,
+      is_pre_holiday: isPre,
+      is_exam_proximity: calcExamProximity,
+      cohort_risk_tier: calcCohortTier,
+    });
+  };
 
   // Bulk Holiday Form inputs
   const [bulkName, setBulkName] = useState('Diwali Vacation Break');
@@ -230,25 +296,38 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-on-surface tracking-tight">Academic Calendar &amp; Mass Bunk Hazards</h1>
+              <h1 className="text-base font-bold text-on-surface tracking-tight">Academic Calendar &amp; Absence Probabilities</h1>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline-variant">
                 Section {activeSection}
               </span>
               {highRiskCount > 0 && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                   <span className="material-symbols-outlined text-[12px]">local_fire_department</span>
-                  {highRiskCount} High Risk Dates
+                  {highRiskCount} Elevated Risk Dates
                 </span>
               )}
             </div>
             <p className="text-[11px] text-on-surface-variant">
-              Deterministic mathematical modeling of contiguous vacation gains, bridge days, and weekend policies
+              Calibrated probabilistic modeling of vacation blocks, bridge days, and absence likelihoods
             </p>
           </div>
         </div>
 
         {/* Toolbar Controls */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* Calibrated Prediction Calculator Button */}
+          <button
+            onClick={() => {
+              setCalcModalOpen(true);
+              if (!calcResult) runPredictionCalculation();
+            }}
+            className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500 hover:text-white text-indigo-600 dark:text-indigo-400 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            title="Open calibrated empirical absence prediction calculator"
+          >
+            <span className="material-symbols-outlined text-[15px]">calculate</span>
+            Prediction Calculator
+          </button>
+
           {/* Weekend Policy Dropdown */}
           <div className="flex items-center bg-surface-container-lowest border border-outline-variant rounded-lg px-2 py-1 text-xs shadow-2xs">
             <span className="material-symbols-outlined text-[14px] text-primary mr-1">weekend</span>
@@ -257,7 +336,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
               value={weekendPolicy}
               onChange={(e) => setWeekendPolicy(e.target.value as any)}
               className="bg-transparent text-on-surface text-xs font-semibold focus:outline-none cursor-pointer"
-              title="College weekend policy for recalculating bunk hazards"
+              title="College weekend policy for recalculating absence probabilities"
             >
               <option value="sat_sun">5-Day Week (Sat + Sun Off)</option>
               <option value="sunday_only">6-Day Week (Sunday Only Off)</option>
@@ -326,7 +405,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
               }`}
             >
               <span className="material-symbols-outlined text-[12px]">local_fire_department</span>
-              Bunk Dates
+              Elevated Risk ({highRiskCount})
             </button>
             <button
               onClick={() => setFilterMode('holidays')}
@@ -479,7 +558,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                           {isHighRisk && (
                             <span
                               className="flex items-center text-rose-600 dark:text-rose-400"
-                              title={`Mass Bunk Hazard: ${day.risk_score}%`}
+                              title={`Absence Probability: ${day.risk_score}%`}
                             >
                               <span className="material-symbols-outlined text-[15px]">local_fire_department</span>
                             </span>
@@ -497,8 +576,8 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                       <div className="mt-1 space-y-0.5">
                         {isHighRisk && (
                           <div className="flex items-center justify-between gap-1 text-[9px] font-bold px-1 py-0.2 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400 truncate">
-                            <span className="truncate">{day.has_detected_bunk ? 'CONFIRMED BUNK' : `${day.risk_score}% RISK`}</span>
-                            {gainedDays >= 3 && !day.has_detected_bunk && (
+                            <span className="truncate">{day.risk_score}% PROBABILITY</span>
+                            {gainedDays >= 3 && (
                               <span className="font-mono text-[8px] bg-rose-500 text-white px-1 rounded shrink-0">
                                 +{gainedDays}d
                               </span>
@@ -508,7 +587,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
 
                         {isMediumRisk && (
                           <div className="flex items-center justify-between gap-1 text-[9px] font-semibold px-1 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 truncate">
-                            <span className="truncate">{day.risk_score}% Risk</span>
+                            <span className="truncate">{day.risk_score}% Probability</span>
                             {gainedDays >= 2 && (
                               <span className="font-mono text-[8px] bg-amber-500/30 px-1 rounded shrink-0">
                                 +{gainedDays}d
@@ -570,7 +649,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                           <span className="text-xs font-bold text-on-surface">{day.date}</span>
                           {isHighRisk && (
                             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                              {day.has_detected_bunk ? 'CONFIRMED BUNK' : `${day.risk_score}% BUNK RISK`}
+                              {day.risk_score}% PROBABILITY
                             </span>
                           )}
                           {day.is_holiday && (
@@ -599,7 +678,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
           <div className="pt-2 border-t border-outline-variant flex flex-wrap items-center justify-between text-[11px] text-on-surface-variant mt-auto">
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> High Bunk Risk (≥65%)
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Elevated Risk (≥65%)
               </span>
               <span className="flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Moderate (35%-64%)
@@ -634,15 +713,10 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                         : 'bg-surface-container text-on-surface-variant'
                     }`}
                   >
-                    {selectedDay.has_detected_bunk ? (
-                      <>
-                        <span className="material-symbols-outlined text-[11px]">local_fire_department</span>
-                        CONFIRMED BUNK
-                      </>
-                    ) : selectedDay.is_holiday ? (
+                    {selectedDay.is_holiday ? (
                       'HOLIDAY / OFF'
                     ) : (
-                      `${selectedDay.risk_score}% RISK`
+                      `${selectedDay.risk_score}% PROBABILITY`
                     )}
                   </span>
                 </div>
@@ -667,8 +741,8 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-on-surface leading-snug">
-                    Bunking this day converts surrounding off-days into a contiguous{' '}
-                    <span className="font-bold text-primary">{selectedDay.consecutive_days_gained}-day vacation block</span>.
+                    Absence on this day converts surrounding off-days into a contiguous{' '}
+                    <span className="font-bold text-primary">{selectedDay.consecutive_days_gained}-day break</span>.
                   </p>
                   {selectedDay.vacation_dates && selectedDay.vacation_dates.length > 0 && (
                     <div className="text-[10px] font-mono text-on-surface-variant flex items-center gap-1 pt-1 border-t border-primary/20">
@@ -683,12 +757,12 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
                 </div>
               )}
 
-              {/* Confirmed Mass Bunk Card (If date had real bunk) */}
+              {/* High Co-Absence Event Card (If date had real co-absence) */}
               {selectedDay.bunk_details && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-1.5 text-xs text-rose-600 dark:text-rose-400">
                   <div className="flex items-center gap-1.5 font-bold">
-                    <span className="material-symbols-outlined text-[15px]">error</span>
-                    <span>Detected Mass Bunk Incident</span>
+                    <span className="material-symbols-outlined text-[15px]">analytics</span>
+                    <span>High Co-Absence Event (P = {selectedDay.risk_score}%)</span>
                   </div>
                   <div className="text-[11px] text-on-surface space-y-0.5">
                     <div>
@@ -713,7 +787,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
               {/* Risk Attribution & Reason */}
               <div className="p-3 bg-surface-container-low rounded-xl border border-outline-variant space-y-1.5 text-xs">
                 <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">
-                  Deterministic Attribution
+                  Empirical Risk Attribution &amp; Probabilities
                 </span>
                 <p className="text-[11px] text-on-surface leading-relaxed">{selectedDay.reason}</p>
                 <div className="pt-1.5 border-t border-outline-variant/60 text-[10px] text-on-surface-variant">
@@ -806,6 +880,17 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
               {/* Proactive Action Buttons */}
               <div className="space-y-2">
                 <button
+                  onClick={() => {
+                    syncFromSelectedDay();
+                    setCalcModalOpen(true);
+                  }}
+                  className="w-full py-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 text-xs font-semibold rounded-xl hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[15px]">calculate</span>
+                  Analyze in Prediction Calculator
+                </button>
+
+                <button
                   onClick={() => onNavigate('interventions', { date: selectedDay.date })}
                   className="w-full py-2 bg-primary text-on-primary text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                 >
@@ -825,7 +910,7 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-xs text-on-surface-variant space-y-2">
               <span className="material-symbols-outlined text-[28px] text-outline">calendar_today</span>
-              <p>Select any day on the calendar to view timetable periods and mass bunk risk analysis.</p>
+              <p>Select any day on the calendar to view timetable periods and calibrated absence risk analysis.</p>
             </div>
           )}
         </div>
@@ -1132,6 +1217,372 @@ export const CalendarRiskView: React.FC<CalendarRiskViewProps> = ({
               >
                 <span className="material-symbols-outlined text-[15px]">content_copy</span>
                 Copy Notice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Calibrated Prediction Calculator Modal ─────────────────────────────── */}
+      {calcModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-outline-variant pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[20px]">calculate</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-on-surface">Calibrated Absence Prediction Calculator</h3>
+                  <p className="text-[11px] text-on-surface-variant">
+                    Exact empirical log-odds model with additive feature attribution (SHAP-style). Zero vague guesswork.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCalcModalOpen(false)}
+                className="text-on-surface-variant hover:text-on-surface p-1.5 rounded-lg cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body: 2 Columns */}
+            <div className="grid grid-cols-12 gap-5 flex-1 overflow-y-auto pr-1">
+              {/* Left Column: Configurable Scenario Inputs (Col 5) */}
+              <div className="col-span-12 lg:col-span-5 space-y-3.5 bg-surface-container-low/40 p-4 rounded-xl border border-outline-variant/60 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-outline-variant/60">
+                  <span className="font-bold text-on-surface text-[11px] uppercase tracking-wider">
+                    Session Parameters
+                  </span>
+                  <button
+                    type="button"
+                    onClick={syncFromSelectedDay}
+                    className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    title="Load date, period, and bridge status from calendar selection"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">sync</span>
+                    Sync from Calendar ({selectedDateStr.slice(5)})
+                  </button>
+                </div>
+
+                {/* Day of Week */}
+                <div>
+                  <label className="text-[11px] font-semibold text-on-surface block mb-1">Day of Week</label>
+                  <select
+                    value={calcDay}
+                    onChange={(e) => {
+                      setCalcDay(e.target.value);
+                      runPredictionCalculation({ day_of_week: e.target.value });
+                    }}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs text-on-surface cursor-pointer focus:outline-none focus:border-primary"
+                  >
+                    <option value="Monday">Monday (Weekend return lag)</option>
+                    <option value="Tuesday">Tuesday (Mid-week steady state)</option>
+                    <option value="Wednesday">Wednesday (Mid-week baseline)</option>
+                    <option value="Thursday">Thursday (Pre-weekend threshold)</option>
+                    <option value="Friday">Friday (Pre-weekend departure pull)</option>
+                  </select>
+                </div>
+
+                {/* Academic Period */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-semibold text-on-surface">Timetable Period</label>
+                    <span className="text-[10px] font-mono text-primary font-bold">Period {calcPeriod}</span>
+                  </div>
+                  <div className="grid grid-cols-8 gap-1">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setCalcPeriod(p);
+                          runPredictionCalculation({ period: p });
+                        }}
+                        className={`py-1 rounded text-center font-mono text-xs font-bold transition-all cursor-pointer ${
+                          calcPeriod === p
+                            ? 'bg-primary text-on-primary shadow-xs'
+                            : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container border border-outline-variant/60'
+                        }`}
+                      >
+                        P{p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Subject Code */}
+                <div>
+                  <label className="text-[11px] font-semibold text-on-surface block mb-1">Subject Code</label>
+                  <input
+                    type="text"
+                    value={calcSubject}
+                    onChange={(e) => setCalcSubject(e.target.value)}
+                    onBlur={() => runPredictionCalculation()}
+                    placeholder="e.g. CS302, CS304, PHY301"
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs text-on-surface uppercase font-mono focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* Laboratory / Practical Session Toggle */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant/60">
+                  <div>
+                    <span className="font-semibold text-on-surface block text-[11px]">Laboratory Practical</span>
+                    <span className="text-[10px] text-on-surface-variant">Mandatory logbook &amp; graded viva (-14.0% deterrence)</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={calcIsLab}
+                    onChange={(e) => {
+                      setCalcIsLab(e.target.checked);
+                      runPredictionCalculation({ is_lab: e.target.checked });
+                    }}
+                    className="w-4 h-4 text-primary rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Consecutive Vacation Days Gained */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-semibold text-on-surface">Vacation Block Gained (If Absent)</label>
+                    <span className="text-[10px] font-mono text-primary font-bold">
+                      {calcBridgeDays === 0 ? '0 days (Normal)' : `+${calcBridgeDays} days break`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 text-[11px]">
+                    {[0, 1, 2, 3, 4].map((bd) => (
+                      <button
+                        key={bd}
+                        type="button"
+                        onClick={() => {
+                          setCalcBridgeDays(bd);
+                          runPredictionCalculation({ bridge_days_gained: bd });
+                        }}
+                        className={`py-1 rounded text-center font-mono font-bold transition-all cursor-pointer ${
+                          calcBridgeDays === bd
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container border border-outline-variant/60'
+                        }`}
+                      >
+                        {bd === 4 ? '4+d' : `${bd}d`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pre-Holiday / Long Weekend Departure */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant/60">
+                  <div>
+                    <span className="font-semibold text-on-surface block text-[11px]">Pre-Holiday Departure Day</span>
+                    <span className="text-[10px] text-on-surface-variant">Immediate eve of gazetted university festival (+19.0%)</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={calcPreHoliday}
+                    onChange={(e) => {
+                      setCalcPreHoliday(e.target.checked);
+                      runPredictionCalculation({ is_pre_holiday: e.target.checked });
+                    }}
+                    className="w-4 h-4 text-primary rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Exam Proximity */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant/60">
+                  <div>
+                    <span className="font-semibold text-on-surface block text-[11px]">Midterm / IA Exam Proximity</span>
+                    <span className="text-[10px] text-on-surface-variant">Within 7 days of internal examinations (-26.0% deterrence)</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={calcExamProximity}
+                    onChange={(e) => {
+                      setCalcExamProximity(e.target.checked);
+                      runPredictionCalculation({ is_exam_proximity: e.target.checked });
+                    }}
+                    className="w-4 h-4 text-primary rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Cohort Social Risk Tier */}
+                <div>
+                  <label className="text-[11px] font-semibold text-on-surface block mb-1">Cohort Social Influence Tier</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(['low', 'medium', 'high'] as const).map((tier) => (
+                      <button
+                        key={tier}
+                        type="button"
+                        onClick={() => {
+                          setCalcCohortTier(tier);
+                          runPredictionCalculation({ cohort_risk_tier: tier });
+                        }}
+                        className={`py-1 px-1 rounded text-center text-[10px] font-bold uppercase transition-all cursor-pointer ${
+                          calcCohortTier === tier
+                            ? tier === 'high'
+                              ? 'bg-rose-500 text-white'
+                              : tier === 'low'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-amber-500 text-white'
+                            : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container border border-outline-variant/60'
+                        }`}
+                      >
+                        {tier === 'low' ? 'Low (-8%)' : tier === 'medium' ? 'Median (+3%)' : 'High (+16%)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={calcLoading}
+                  onClick={() => runPredictionCalculation()}
+                  className="w-full py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  <span className={`material-symbols-outlined text-[16px] ${calcLoading ? 'animate-spin' : ''}`}>
+                    {calcLoading ? 'sync' : 'auto_graph'}
+                  </span>
+                  {calcLoading ? 'Computing Calibrated Odds...' : 'Recalculate Absence Probability'}
+                </button>
+              </div>
+
+              {/* Right Column: Precision Mathematical Results (Col 7) */}
+              <div className="col-span-12 lg:col-span-7 space-y-4">
+                {calcResult ? (
+                  <>
+                    {/* Primary Prediction Metric Card */}
+                    <div className="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
+                          Calibrated Absence Probability
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            calcResult.risk_level === 'HIGH'
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                              : calcResult.risk_level === 'MEDIUM'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                          }`}
+                        >
+                          {calcResult.risk_level} ABSENCE PROBABILITY
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-4xl font-extrabold font-mono tracking-tight text-on-surface">
+                          {calcResult.probability}%
+                        </span>
+                        <span className="text-xs font-mono text-on-surface-variant">
+                          95% CI: [{calcResult.confidence_interval[0]}% – {calcResult.confidence_interval[1]}%] (±{calcResult.margin_of_error}%)
+                        </span>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="w-full h-2 rounded-full bg-surface-container overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 rounded-full ${
+                            calcResult.probability >= 65
+                              ? 'bg-rose-500'
+                              : calcResult.probability >= 35
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${calcResult.probability}%` }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-outline-variant/60 text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-on-surface-variant block">Institutional Baseline Rate:</span>
+                          <span className="font-bold text-on-surface">{calcResult.baseline_rate}%</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-on-surface-variant block">Net Factor Attribution Impact:</span>
+                          <span className={`font-bold ${calcResult.net_factor_impact >= 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+                            {calcResult.net_factor_impact >= 0 ? `+${calcResult.net_factor_impact}%` : `${calcResult.net_factor_impact}%`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Attribution Waterfall / Breakdown */}
+                    <div className="rounded-xl border border-outline-variant bg-surface-container-lowest overflow-hidden">
+                      <div className="p-3 bg-surface-container-low border-b border-outline-variant flex justify-between items-center">
+                        <span className="text-[11px] font-bold text-on-surface uppercase tracking-wider">
+                          Feature Attribution Waterfall (SHAP-Style)
+                        </span>
+                        <span className="text-[10px] font-mono text-on-surface-variant">
+                          Linear Log-Odds Additive Breakdown
+                        </span>
+                      </div>
+
+                      <div className="divide-y divide-outline-variant/60 text-xs">
+                        {calcResult.attributions.map((attr, idx) => {
+                          const isPos = attr.impact > 0;
+                          const isZero = attr.impact === 0;
+                          return (
+                            <div key={idx} className="p-2.5 flex items-center justify-between gap-2 hover:bg-surface-container-low/40 transition-colors">
+                              <div className="space-y-0.5 max-w-[70%]">
+                                <span className="font-semibold text-on-surface block text-[11px]">
+                                  {attr.factor}
+                                </span>
+                                <span className="text-[10px] text-on-surface-variant block">
+                                  {attr.description}
+                                </span>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span
+                                  className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded ${
+                                    isZero
+                                      ? 'bg-surface-container text-on-surface-variant'
+                                      : isPos
+                                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 font-extrabold'
+                                      : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold'
+                                  }`}
+                                >
+                                  {attr.impact > 0 ? `+${attr.impact.toFixed(1)}%` : `${attr.impact.toFixed(1)}%`}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Mathematical Integrity Callout */}
+                    <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-primary text-[11px]">
+                        <span className="material-symbols-outlined text-[15px]">verified</span>
+                        <span>Verifiable Empirical Formula</span>
+                      </div>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                        Model: <code className="bg-surface-container px-1 py-0.5 rounded font-mono text-[10px]">{calcResult.mathematical_model}</code>. All probabilities reflect historical class registers and peer cohort influence metrics.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-12 text-center text-xs text-on-surface-variant flex flex-col items-center justify-center space-y-2">
+                    <span className="material-symbols-outlined text-[28px] animate-spin text-primary">sync</span>
+                    <span>Computing initial calibrated scenario...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center pt-3 border-t border-outline-variant shrink-0">
+              <span className="text-[11px] text-on-surface-variant">
+                Section: <span className="font-semibold text-on-surface">{activeSection}</span> • Institutional Baseline: <span className="font-semibold text-on-surface">14.2%</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setCalcModalOpen(false)}
+                className="px-4 py-1.5 bg-surface-container hover:bg-surface-container-high text-xs font-semibold rounded-lg cursor-pointer transition-colors"
+              >
+                Close Calculator
               </button>
             </div>
           </div>

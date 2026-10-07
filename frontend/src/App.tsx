@@ -6,12 +6,12 @@ import { RoleSwitcherModal } from './components/layout/RoleSwitcherModal';
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { GraphView } from './views/GraphView';
+import { KnowledgeGraphView } from './views/KnowledgeGraphView';
 import { DataIngestionView } from './views/DataIngestionView';
 import { AlertsView } from './views/AlertsView';
 import { InterventionsView } from './views/InterventionsView';
 import { StudentRosterView } from './views/StudentRosterView';
 import { CalendarRiskView } from './views/CalendarRiskView';
-import { AuditLogView } from './views/AuditLogView';
 import { StudentMyDataView } from './views/StudentMyDataView';
 import { api } from './api/client';
 
@@ -180,6 +180,14 @@ export default function App() {
             />
           )}
 
+          {activeView === 'knowledge-graph' && (
+            <KnowledgeGraphView
+              onNavigate={handleNavigate}
+              activeSection={activeSection}
+              onSelectStudent={setSelectedStudentId}
+            />
+          )}
+
           {activeView === 'ingestion' && (
             <DataIngestionView onNavigate={handleNavigate} />
           )}
@@ -213,10 +221,6 @@ export default function App() {
               onNavigate={handleNavigate}
               activeSection={activeSection}
             />
-          )}
-
-          {activeView === 'audit' && (
-            <AuditLogView onNavigate={handleNavigate} />
           )}
 
           {activeView === 'student-portal' && (

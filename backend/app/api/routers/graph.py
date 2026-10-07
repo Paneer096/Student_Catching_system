@@ -6,7 +6,9 @@ Serves live NetworkX social co-absence graph nodes, edges, and student dossiers.
 from __future__ import annotations
 
 from typing import Any
+import networkx as nx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -20,6 +22,29 @@ from app.graph.graph_engine import (
 )
 
 router = APIRouter(prefix="/graph", tags=["Social Graph"])
+
+# In-memory storage for user-injected nodes & edges
+_dynamic_nodes: list[dict[str, Any]] = []
+_dynamic_edges: list[dict[str, Any]] = []
+
+
+class CreateNodeRequest(BaseModel):
+    id: str
+    label: str
+    type: str
+    community: int | None = None
+    pagerank: float | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class CreateEdgeRequest(BaseModel):
+    source: str
+    target: str
+    type: str
+    weight: float = 1.0
+    timestamp: str | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
 
 
 @router.get("/bunk-network")
@@ -169,4 +194,289 @@ async def get_student_profile(
     if not profile:
         raise HTTPException(status_code=404, detail=f"Student with roll number '{roll_no}' not found.")
     return profile
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Interactive Knowledge Graph Service Endpoints (Prompt 3 Specifications)
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def _build_knowledge_nx_graph(db: AsyncSession, section: str = "CS-3B") -> tuple[nx.Graph, list[dict], list[dict]]:
+    """Helper to assemble a unified NetworkX Graph from database + dynamic injections."""
+    co_graph = await build_coabsence_graph(db, section)
+    G = nx.Graph()
+
+    type_mapping = {
+        "classroom": "Classroom",
+        "teacher": "Faculty",
+        "cr": "Student",
+        "anchor": "Student",
+        "bridge": "Student",
+        "associate": "Student",
+        "student": "Student",
+    }
+
+    nodes_out: list[dict[str, Any]] = []
+    edges_out: list[dict[str, Any]] = []
+    node_id_set: set[str] = set()
+
+    for n in co_graph.get("nodes", []):
+        nid = str(n.get("id", ""))
+        if not nid:
+            continue
+        node_id_set.add(nid)
+        ntype = type_mapping.get(n.get("type", "student"), "Student")
+        label = n.get("name") or n.get("roll_no") or nid
+        G.add_node(nid, label=label, type=ntype, raw=n)
+
+    for e in co_graph.get("edges", []):
+        src = str(e.get("source", ""))
+        tgt = str(e.get("target", ""))
+        if src in node_id_set and tgt in node_id_set:
+            w = float(e.get("weight", 1.0))
+            etype = "CO_ABSENT" if e.get("type") == "coabsence" else "SUPERVISES"
+            G.add_edge(src, tgt, weight=w, type=etype)
+
+    # Incorporate dynamic user-created nodes & edges
+    for dn in _dynamic_nodes:
+        nid = str(dn["id"])
+        node_id_set.add(nid)
+        G.add_node(nid, label=dn.get("label", nid), type=dn.get("type", "Custom"), raw=dn)
+
+    for de in _dynamic_edges:
+        src = str(de["source"])
+        tgt = str(de["target"])
+        if src in node_id_set and tgt in node_id_set:
+            G.add_edge(src, tgt, weight=float(de.get("weight", 1.0)), type=de.get("type", "CONNECTED_TO"))
+
+    # Compute graph metrics
+    if len(G) > 0:
+        deg_dict = dict(G.degree())
+        try:
+            pr_dict = nx.pagerank(G, weight="weight")
+        except Exception:
+            pr_dict = {n: 1.0 / len(G) for n in G.nodes}
+
+        # Louvain Community detection
+        community_map: dict[str, int] = {}
+        try:
+            communities = nx.community.louvain_communities(G, weight="weight", seed=42)
+            for idx, c_set in enumerate(communities):
+                for nid in c_set:
+                    community_map[nid] = idx + 1
+        except Exception:
+            community_map = {n: 1 for n in G.nodes}
+    else:
+        deg_dict, pr_dict, community_map = {}, {}, {}
+
+    # Format nodes
+    for nid in G.nodes:
+        node_attrs = G.nodes[nid]
+        raw = node_attrs.get("raw", {})
+        props = raw.get("properties") or {
+            "attendance_pct": raw.get("attendance_pct"),
+            "role": raw.get("role"),
+            "cohort": raw.get("cohort"),
+            "delinquency": raw.get("delinquency_label"),
+            "absences": raw.get("absences"),
+        }
+        nodes_out.append({
+            "id": nid,
+            "label": node_attrs.get("label", nid),
+            "type": node_attrs.get("type", "Student"),
+            "community": community_map.get(nid, 1),
+            "pagerank": round(pr_dict.get(nid, 0.0), 4),
+            "degree": deg_dict.get(nid, 0),
+            "properties": {k: v for k, v in props.items() if v is not None},
+        })
+
+    # Format edges
+    for u, v, data in G.edges(data=True):
+        edges_out.append({
+            "source": u,
+            "target": v,
+            "type": data.get("type", "CONNECTED_TO"),
+            "weight": round(data.get("weight", 1.0), 2),
+            "timestamp": "2026-10-08T00:00:00Z",
+            "properties": {"weight": data.get("weight", 1.0)},
+        })
+
+    return G, nodes_out, edges_out
+
+
+@router.get("/data")
+async def get_knowledge_graph_data(
+    section: str = Query(default="CS-3B", description="Section code"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Returns complete Knowledge Graph network {nodes, edges} including:
+    - Degree Centrality
+    - PageRank score
+    - Louvain Community detection cluster IDs
+    - Multi-entity relational data
+    """
+    _, nodes, edges = await _build_knowledge_nx_graph(db, section)
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "summary": {
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "section": section,
+            "status": "ONLINE",
+        },
+    }
+
+
+@router.get("/shortest-path")
+async def get_knowledge_graph_shortest_path(
+    source: str = Query(..., description="Source node ID"),
+    target: str = Query(..., description="Target node ID"),
+    section: str = Query(default="CS-3B", description="Section code"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Returns shortest path { nodes: [ids], edges: [...] } between source and target node.
+    """
+    G, _, _ = await _build_knowledge_nx_graph(db, section)
+    if source not in G:
+        raise HTTPException(status_code=404, detail=f"Source node '{source}' not found in graph.")
+    if target not in G:
+        raise HTTPException(status_code=404, detail=f"Target node '{target}' not found in graph.")
+
+    try:
+        path = nx.shortest_path(G, source=source, target=target, weight=None)
+        path_edges = []
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            edge_data = G.get_edge_data(u, v) or {}
+            path_edges.append({
+                "source": u,
+                "target": v,
+                "type": edge_data.get("type", "CONNECTED_TO"),
+                "weight": edge_data.get("weight", 1.0),
+            })
+        return {
+            "source": source,
+            "target": target,
+            "found": True,
+            "nodes": path,
+            "edges": path_edges,
+            "length": len(path) - 1,
+        }
+    except nx.NetworkXNoPath:
+        return {
+            "source": source,
+            "target": target,
+            "found": False,
+            "nodes": [],
+            "edges": [],
+            "length": 0,
+            "message": "No connecting path exists between these entities.",
+        }
+
+
+@router.get("/subgraph")
+async def get_knowledge_graph_subgraph(
+    node_id: str = Query(..., description="Root node ID"),
+    depth: int = Query(default=1, ge=1, le=4, description="Hop depth for ego network"),
+    section: str = Query(default="CS-3B", description="Section code"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Returns k-hop ego network subgraph around a specific node.
+    """
+    G, all_nodes, all_edges = await _build_knowledge_nx_graph(db, section)
+    if node_id not in G:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found in graph.")
+
+    ego_sub = nx.ego_graph(G, node_id, radius=depth)
+    ego_nodes = set(ego_sub.nodes)
+
+    sub_nodes = [n for n in all_nodes if n["id"] in ego_nodes]
+    sub_edges = [
+        e for e in all_edges
+        if e["source"] in ego_nodes and e["target"] in ego_nodes
+    ]
+
+    return {
+        "root_node_id": node_id,
+        "depth": depth,
+        "nodes": sub_nodes,
+        "edges": sub_edges,
+    }
+
+
+@router.post("/nodes")
+async def create_knowledge_graph_node(
+    payload: CreateNodeRequest,
+) -> dict[str, Any]:
+    """
+    Dynamically injects a new node into the live Knowledge Graph.
+    """
+    node_entry = {
+        "id": payload.id,
+        "label": payload.label,
+        "type": payload.type,
+        "community": payload.community or 1,
+        "pagerank": payload.pagerank or 0.05,
+        "properties": payload.properties,
+    }
+    # Check duplicate
+    for i, n in enumerate(_dynamic_nodes):
+        if n["id"] == payload.id:
+            _dynamic_nodes[i] = node_entry
+            return {"status": "updated", "node": node_entry}
+
+    _dynamic_nodes.append(node_entry)
+    return {"status": "created", "node": node_entry}
+
+
+@router.post("/edges")
+async def create_knowledge_graph_edge(
+    payload: CreateEdgeRequest,
+) -> dict[str, Any]:
+    """
+    Dynamically injects a new edge into the live Knowledge Graph.
+    """
+    edge_entry = {
+        "source": payload.source,
+        "target": payload.target,
+        "type": payload.type,
+        "weight": payload.weight,
+        "timestamp": payload.timestamp or "2026-10-08T00:00:00Z",
+        "properties": payload.properties,
+    }
+    _dynamic_edges.append(edge_entry)
+    return {"status": "created", "edge": edge_entry}
+
+
+@router.get("/timeline")
+async def get_knowledge_graph_timeline(
+    start: str | None = Query(default=None, description="Start date/time ISO string"),
+    end: str | None = Query(default=None, description="End date/time ISO string"),
+    section: str = Query(default="CS-3B", description="Section code"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Filter nodes and relational edges by temporal timeframe.
+    """
+    _, nodes, edges = await _build_knowledge_nx_graph(db, section)
+    # Filter edges by timestamp if specified
+    filtered_edges = edges
+    if start or end:
+        filtered_edges = [
+            e for e in edges
+            if (not start or e.get("timestamp", "") >= start) and (not end or e.get("timestamp", "") <= end)
+        ]
+    active_node_ids = {e["source"] for e in filtered_edges} | {e["target"] for e in filtered_edges}
+    filtered_nodes = [n for n in nodes if n["id"] in active_node_ids or not (start or end)]
+
+    return {
+        "start": start,
+        "end": end,
+        "nodes": filtered_nodes,
+        "edges": filtered_edges,
+    }
+
 

@@ -541,6 +541,44 @@ class ApiClient {
     });
   }
 
+  async predictProbability(payload: {
+    day_of_week?: string;
+    period?: number;
+    subject_code?: string;
+    is_lab?: boolean;
+    bridge_days_gained?: number;
+    is_pre_holiday?: boolean;
+    is_exam_proximity?: boolean;
+    cohort_risk_tier?: string;
+    student_roll?: string;
+    section?: string;
+  }): Promise<CalibratedPredictionResult> {
+    return this.request<CalibratedPredictionResult>('/calendar/predict-probability', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async sendStudentEmail(payload: SendEmailPayload): Promise<{
+    status: string;
+    email_id: string;
+    timestamp: string;
+    recipient: string;
+    student_name: string;
+    category: string;
+    message: string;
+    record: DispatchedEmailRecord;
+  }> {
+    return this.request('/interventions/send-email', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getDispatchedEmails(section = 'CS-3B'): Promise<DispatchedEmailRecord[]> {
+    return this.request<DispatchedEmailRecord[]>(`/interventions/emails?section=${encodeURIComponent(section)}`);
+  }
+
   async getStudentsRoster(section = 'CS-3B'): Promise<StudentRosterItem[]> {
     return this.request<StudentRosterItem[]>(`/students?section=${encodeURIComponent(section)}`);
   }
@@ -598,7 +636,96 @@ class ApiClient {
   async getPairEvidence(rollA: string, rollB: string, section = 'CS-3B'): Promise<PairEvidenceData> {
     return this.request<PairEvidenceData>(`/graph/evidence/${encodeURIComponent(rollA)}/${encodeURIComponent(rollB)}?section=${encodeURIComponent(section)}`);
   }
+
+  // ── Knowledge Graph API (Prompt 3 Specifications) ──────────────────────
+  async getKnowledgeGraphData(section = 'CS-3B'): Promise<KnowledgeGraphData> {
+    return this.request<KnowledgeGraphData>(`/graph/data?section=${encodeURIComponent(section)}`);
+  }
+
+  async getKnowledgeGraphShortestPath(source: string, target: string, section = 'CS-3B'): Promise<ShortestPathResult> {
+    return this.request<ShortestPathResult>(
+      `/graph/shortest-path?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&section=${encodeURIComponent(section)}`
+    );
+  }
+
+  async getKnowledgeGraphSubgraph(nodeId: string, depth = 1, section = 'CS-3B'): Promise<{ root_node_id: string; depth: number; nodes: any[]; edges: any[] }> {
+    return this.request(
+      `/graph/subgraph?node_id=${encodeURIComponent(nodeId)}&depth=${depth}&section=${encodeURIComponent(section)}`
+    );
+  }
+
+  async createKnowledgeGraphNode(node: { id: string; label: string; type: string; community?: number; properties?: Record<string, any> }) {
+    return this.request('/graph/nodes', {
+      method: 'POST',
+      body: JSON.stringify(node),
+    });
+  }
+
+  async createKnowledgeGraphEdge(edge: { source: string; target: string; type: string; weight?: number; timestamp?: string; properties?: Record<string, any> }) {
+    return this.request('/graph/edges', {
+      method: 'POST',
+      body: JSON.stringify(edge),
+    });
+  }
+
+  async getKnowledgeGraphTimeline(start?: string, end?: string, section = 'CS-3B'): Promise<{ start?: string; end?: string; nodes: any[]; edges: any[] }> {
+    const q = new URLSearchParams();
+    if (start) q.append('start', start);
+    if (end) q.append('end', end);
+    q.append('section', section);
+    return this.request(`/graph/timeline?${q.toString()}`);
+  }
 }
+
+export interface KnowledgeGraphNode {
+  id: string;
+  label: string;
+  type: string;
+  community?: number;
+  pagerank?: number;
+  degree?: number;
+  properties?: Record<string, any>;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+}
+
+export interface KnowledgeGraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  weight?: number;
+  timestamp?: string;
+  properties?: Record<string, any>;
+}
+
+export interface KnowledgeGraphData {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  summary?: {
+    node_count: number;
+    edge_count: number;
+    section: string;
+    status: string;
+  };
+}
+
+export interface ShortestPathResult {
+  source: string;
+  target: string;
+  found: boolean;
+  nodes: string[];
+  edges: Array<{
+    source: string;
+    target: string;
+    type: string;
+    weight: number;
+  }>;
+  length: number;
+  message?: string;
+}
+
 
 export interface CytoscapeBunkNetworkData {
   section_code: string;
@@ -648,6 +775,62 @@ export interface PairEvidenceData {
     period: number;
     subject_code: string;
   }>;
+}
+
+export interface CalibratedPredictionResult {
+  probability: number;
+  confidence_interval: [number, number];
+  margin_of_error: number;
+  risk_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  baseline_rate: number;
+  net_factor_impact: number;
+  attributions: Array<{
+    factor: string;
+    impact: number;
+    description: string;
+  }>;
+  mathematical_model: string;
+  inputs: {
+    day_of_week: string;
+    period: number;
+    subject_code: string;
+    is_lab: boolean;
+    bridge_days_gained: number;
+    is_pre_holiday: boolean;
+    is_exam_proximity: boolean;
+    cohort_risk_tier: string;
+  };
+}
+
+export interface SendEmailPayload {
+  student_roll: string;
+  student_name?: string;
+  student_email?: string;
+  category: 'behavior' | 'attendance' | 'academic' | 'wellbeing' | 'general';
+  subject: string;
+  body: string;
+  sender_name?: string;
+  sender_role?: string;
+  cc_counselor?: boolean;
+  priority?: 'normal' | 'high' | 'urgent';
+  section?: string;
+}
+
+export interface DispatchedEmailRecord {
+  id: string;
+  student_roll: string;
+  student_name: string;
+  student_email: string;
+  category: string;
+  subject: string;
+  body: string;
+  sender_name: string;
+  sender_role: string;
+  cc_counselor: boolean;
+  priority: string;
+  section: string;
+  timestamp: string;
+  status: string;
 }
 
 export const api = new ApiClient();
