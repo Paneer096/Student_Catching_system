@@ -1,4 +1,4 @@
-# Makerove — Models Package
+# Makarov — Models Package
 from .orm import Base
 from .enums import *
 
