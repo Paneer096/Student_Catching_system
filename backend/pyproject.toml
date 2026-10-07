@@ -9,7 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
-    "sqlalchemy>=2.0.35",
+    "sqlalchemy[asyncio]>=2.0.35",
     "aiosqlite>=0.20.0",
     "alembic>=1.13.0",
     "argon2-cffi>=23.1.0",
@@ -59,3 +59,13 @@ testpaths = ["tests"]
 markers = [
     "live_llm: tests that require a real Gemini API key",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["config/*.yaml"]
