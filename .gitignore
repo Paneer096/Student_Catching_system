@@ -64,3 +64,8 @@ Thumbs.db
 logs/
 backend/logs/
 
+
+# Project-local Node runtime
+.tools/
+# TypeScript incremental build cache
+*.tsbuildinfo
