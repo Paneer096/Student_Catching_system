@@ -13,7 +13,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
-from app.models.orm import Session as SessionModel, User
+from app.models.orm import AuthSession as SessionModel, User
 
 
 settings = get_settings()

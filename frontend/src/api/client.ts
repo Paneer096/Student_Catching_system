@@ -578,6 +578,76 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  async getBunkNetwork(params?: {
+    section?: string;
+    overlays?: string[];
+    subject?: string;
+    period?: number;
+    weekday?: number;
+  }): Promise<CytoscapeBunkNetworkData> {
+    const q = new URLSearchParams();
+    if (params?.section) q.append('section', params.section);
+    if (params?.overlays && params.overlays.length > 0) q.append('overlays', params.overlays.join(','));
+    if (params?.subject) q.append('subject', params.subject);
+    if (params?.period !== undefined) q.append('period', String(params.period));
+    if (params?.weekday !== undefined) q.append('weekday', String(params.weekday));
+    return this.request<CytoscapeBunkNetworkData>(`/graph/bunk-network?${q.toString()}`);
+  }
+
+  async getPairEvidence(rollA: string, rollB: string, section = 'CS-3B'): Promise<PairEvidenceData> {
+    return this.request<PairEvidenceData>(`/graph/evidence/${encodeURIComponent(rollA)}/${encodeURIComponent(rollB)}?section=${encodeURIComponent(section)}`);
+  }
+}
+
+export interface CytoscapeBunkNetworkData {
+  section_code: string;
+  elements: Array<{
+    group: 'nodes' | 'edges';
+    data: any;
+    classes?: string;
+  }>;
+  compound_groups: Array<{
+    id: string;
+    label: string;
+    size: number;
+    members: string[];
+    is_compound: boolean;
+  }>;
+  isolated_students: Array<{
+    id: string;
+    name: string;
+    roll_no: string;
+    bunk_rate_30d: number;
+    attendance_rate: number;
+  }>;
+  summary: {
+    total_students: number;
+    connected_students: number;
+    isolated_count: number;
+    edge_count: number;
+    sessions_evaluated: number;
+    is_degraded: boolean;
+    groups_count: number;
+    rendered_nodes: number;
+  };
+}
+
+export interface PairEvidenceData {
+  student_a: string;
+  student_b: string;
+  plain_language: string;
+  lift: number;
+  expected: number;
+  co_bunk_count: number;
+  p_value: number;
+  q_value: number;
+  jaccard: number;
+  sessions: Array<{
+    date: string;
+    period: number;
+    subject_code: string;
+  }>;
 }
 
 export const api = new ApiClient();

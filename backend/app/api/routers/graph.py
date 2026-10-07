@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.graph.bunk_network import build_cytoscape_bunk_graph
+from app.graph.statistical_derivation import derive_skips_with_edges
 from app.graph.graph_engine import (
     build_coabsence_graph,
     get_student_dossier,
@@ -18,6 +20,68 @@ from app.graph.graph_engine import (
 )
 
 router = APIRouter(prefix="/graph", tags=["Social Graph"])
+
+
+@router.get("/bunk-network")
+async def get_bunk_network(
+    section: str = Query(default="CS-3B", description="Section code"),
+    overlays: str | None = Query(default=None, description="Comma-separated overlays: friends,observations,interventions"),
+    subject: str | None = Query(default=None, description="Subject code filter"),
+    period: int | None = Query(default=None, description="Period filter"),
+    weekday: int | None = Query(default=None, description="Weekday filter (0=Mon, 6=Sun)"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Returns spec-compliant Cytoscape.js bunk network graph (§7):
+    - Statistically validated SKIPS_WITH edges (§5.1)
+    - Compound container clusters (Louvain communities)
+    - Node visual encodings (30d bunk rate)
+    - Isolated students list for sidebar
+    - Plain-language statistical evidence
+    """
+    overlay_list = [o.strip() for o in overlays.split(",")] if overlays else None
+    return await build_cytoscape_bunk_graph(
+        db,
+        section_code=section,
+        subject_code=subject,
+        period=period,
+        weekday=weekday,
+        overlays=overlay_list,
+    )
+
+
+@router.get("/evidence/{roll_a}/{roll_b}")
+async def get_pair_evidence(
+    roll_a: str,
+    roll_b: str,
+    section: str = Query(default="CS-3B", description="Section code"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Returns plain-language statistical proof and co-bunk session IDs between two students (§7 Evidence drawer).
+    """
+    res = await derive_skips_with_edges(db, section_code=section)
+    for edge in res.get("edges", []):
+        if (edge["source"] == roll_a and edge["target"] == roll_b) or (edge["source"] == roll_b and edge["target"] == roll_a):
+            return {
+                "student_a": roll_a,
+                "student_b": roll_b,
+                "plain_language": edge["plain_language"],
+                "lift": edge["props"]["lift"],
+                "expected": edge["props"]["expected"],
+                "co_bunk_count": edge["evidence_count"],
+                "p_value": edge["p_value"],
+                "q_value": edge["q_value"],
+                "jaccard": edge["weight"],
+                "sessions": edge["evidence"],
+            }
+    return {
+        "student_a": roll_a,
+        "student_b": roll_b,
+        "plain_language": "No statistically significant co-bunking edge found between these students.",
+        "co_bunk_count": 0,
+        "sessions": [],
+    }
 
 
 @router.get("/hierarchy")

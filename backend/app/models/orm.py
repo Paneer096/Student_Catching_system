@@ -291,6 +291,18 @@ class SurveyNomination(Base):
         UniqueConstraint("wave_id", "nominator_id", "nominee_id", "kind", name="uq_survey_nomination"),
     )
 
+    @property
+    def student_id(self) -> str:
+        return self.nominator_id
+
+    @property
+    def target_id(self) -> str:
+        return self.nominee_id
+
+
+# Backward compatibility alias
+SurveyResponse = SurveyNomination
+
 
 class Club(Base):
     __tablename__ = "clubs"
@@ -550,6 +562,10 @@ class IngestionRun(Base):
     # §9: Unknown roll numbers go into error report, never silently dropped.
     is_dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# Backward-compatibility alias
+IngestionBatch = IngestionRun
 
 
 # ─── Prediction Model Registry (§6) ──────────────────────────────────────────

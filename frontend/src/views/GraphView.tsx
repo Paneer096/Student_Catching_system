@@ -4,8 +4,10 @@ import {
   HierarchicalGraphData,
   HierarchicalStudent,
   StudentDossier,
+  CytoscapeBunkNetworkData,
 } from '../api/client';
 import { ClassroomGraph } from '../components/graph/ClassroomGraph';
+import { CytoscapeBunkGraph } from '../components/graph/CytoscapeBunkGraph';
 import { GraphBreadcrumb, BreadcrumbSegment } from '../components/graph/GraphBreadcrumb';
 import { EdgeTypeFilter } from '../components/graph/EdgeTypeFilter';
 import { EdgeTypeKey } from '../components/graph/EdgeRenderer';
@@ -25,6 +27,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
 }) => {
   // Graph Data & Loading States
   const [data, setData] = useState<HierarchicalGraphData | null>(null);
+  const [bunkData, setBunkData] = useState<CytoscapeBunkNetworkData | null>(null);
+  const [viewEngine, setViewEngine] = useState<'cytoscape' | 'hierarchy'>('cytoscape');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,16 +72,20 @@ export const GraphView: React.FC<GraphViewProps> = ({
     }
   };
 
-  // Fetch Hierarchical Graph Data from Backend
+  // Fetch Graph Data from Backend
   const fetchGraphData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const graphData = await api.getGraphHierarchy(activeSection);
-      setData(graphData);
+      const [graphData, bunkRes] = await Promise.all([
+        api.getGraphHierarchy(activeSection).catch(() => null),
+        api.getBunkNetwork({ section: activeSection }).catch(() => null),
+      ]);
+      if (graphData) setData(graphData);
+      if (bunkRes) setBunkData(bunkRes);
 
       // Handle initial student target if passed via URL or navigation
-      if (initialStudentId) {
+      if (initialStudentId && graphData) {
         // Find student in clusters
         for (const cl of graphData.clusters) {
           const matched = cl.members.find(
@@ -97,7 +105,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         setSelectedNode(null);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to construct hierarchical graph');
+      setError(err?.message || 'Failed to construct graph');
     } finally {
       setLoading(false);
     }
@@ -441,10 +449,59 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
   return (
     <div className="h-[calc(100vh-112px)] flex flex-col space-y-2 pb-0">
-      {/* ─── Top Graph Control Toolbar (Section 5) ─────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        {/* Left: Breadcrumb Navigation & Layer Status */}
+      {/* ─── Engine Mode Switcher (§7 Makarov Specification) ────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-container-low/90 backdrop-blur border border-outline-variant/60 rounded-xl">
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setViewEngine('cytoscape')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+              viewEngine === 'cytoscape'
+                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[17px]">hub</span>
+            <span>Bunk Network (Cytoscape.js)</span>
+            <span className="text-[10px] bg-slate-950/20 px-1.5 py-0.5 rounded font-bold uppercase">Spec §7</span>
+          </button>
+          <button
+            onClick={() => setViewEngine('hierarchy')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+              viewEngine === 'hierarchy'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[17px]">account_tree</span>
+            <span>Administrative Hierarchy</span>
+          </button>
+        </div>
+        <div className="text-[11px] font-mono text-on-surface-variant hidden sm:block">
+          Active Section: <strong className="text-on-surface">{activeSection}</strong>
+        </div>
+      </div>
+
+      {viewEngine === 'cytoscape' ? (
+        <div className="flex-1 w-full min-h-0 overflow-hidden">
+          {bunkData ? (
+            <CytoscapeBunkGraph
+              data={bunkData}
+              activeSection={activeSection}
+              onSelectStudent={(roll) => handleSearchSelect(roll)}
+              onRefresh={fetchGraphData}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs font-mono text-on-surface-variant">
+              Computing statistically validated bunk network...
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* ─── Top Graph Control Toolbar (Section 5) ─────────────────────────────────── */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            {/* Left: Breadcrumb Navigation & Layer Status */}
+            <div className="flex items-center gap-2">
           <GraphBreadcrumb
             segments={breadcrumbSegments}
             onSelectSegment={handleSelectBreadcrumb}
@@ -973,6 +1030,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

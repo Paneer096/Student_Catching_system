@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.orm import (
     User,
-    Session as SessionModel,
+    AuthSession as SessionModel,
     Section,
     Teacher,
     TeacherSubjectSection,
