@@ -8,6 +8,7 @@ Every number is derived mathematically from database attendance records.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Any
 import networkx as nx
 from networkx.algorithms.community import louvain_communities
@@ -20,9 +21,10 @@ from app.models.orm import (
     Intervention, InterventionStudent
 )
 from app.config.settings import get_thresholds
+from app.graph.statistical_derivation import derive_skips_with_edges
 
 
-async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -> dict[str, Any]:
+async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B", min_weight: int = 3) -> dict[str, Any]:
     """
     Build a hierarchical social and administrative knowledge graph for a given section.
     
@@ -34,7 +36,7 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
     
     Edges:
     - Hierarchy Edges: Direct supervisory and coordination links (Classroom -> Teacher -> CR -> Cohorts)
-    - Co-Absence Edges: Co-absent student pairs computed directly from attendance records.
+    - Co-Absence Edges: Statistically meaningful and non-mass co-absent student pairs (weight >= min_weight).
     """
     # 1. Fetch section
     stmt_sec = select(Section).where(Section.code == section_code)
@@ -89,15 +91,15 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
     student_map = {s.id: s for s in students}
     student_id_to_roll = {s.id: s.roll_no for s in students}
 
-    # 4. Calculate per-student attendance rates & co-absence occurrences
+    # 4. Calculate per-student attendance rates & coordinated co-absence occurrences
     attendance_stats: dict[str, dict[str, int]] = {s.id: {"total": 0, "present": 0, "absent": 0} for s in students}
+    student_day_statuses = defaultdict(lambda: defaultdict(list))
 
     stmt_att = select(Attendance).where(Attendance.student_id.in_(list(student_map.keys())))
     att_res = await db.execute(stmt_att)
     all_attendance = list(att_res.scalars().all())
 
-    # Group absences by (date, period)
-    session_absentees: dict[tuple[Any, int], list[str]] = {}
+    # Map attendance by student and date to identify partial-day bunks (presence in >= 1 session)
     for att in all_attendance:
         sid = att.student_id
         if sid in attendance_stats:
@@ -106,24 +108,56 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
                 attendance_stats[sid]["present"] += 1
             elif att.status == "ABSENT":
                 attendance_stats[sid]["absent"] += 1
+        student_day_statuses[sid][att.date].append(att.status)
+
+    # Exclude mass-absence sessions (>= 40% of section absent, e.g. mass bunks / strikes / fests)
+    n_students = len(students)
+    mass_cutoff = int(0.40 * n_students)
+    session_bunkers: dict[tuple[Any, int], list[str]] = {}
+
+    for att in all_attendance:
+        if att.status == "ABSENT":
+            sid = att.student_id
+            day_statuses = student_day_statuses[sid].get(att.date, [])
+            had_presence = any(st in ("PRESENT", "LATE") for st in day_statuses)
+            # Only count as coordinated partial-day bunk if student was present elsewhere that day (§2)
+            if had_presence:
                 key = (att.date, att.period)
-                session_absentees.setdefault(key, []).append(sid)
+                session_bunkers.setdefault(key, []).append(sid)
 
     # 5. Build NetworkX co-absence graph
     G = nx.Graph()
     for s in students:
         G.add_node(s.id, roll_no=s.roll_no, name=s.name)
 
-    # Compute co-absence edge weights
-    for (d, period), abs_list in session_absentees.items():
-        if len(abs_list) > 1:
-            for i in range(len(abs_list)):
-                for j in range(i + 1, len(abs_list)):
-                    u, v = abs_list[i], abs_list[j]
-                    if G.has_edge(u, v):
-                        G[u][v]["weight"] += 1
-                    else:
-                        G.add_edge(u, v, weight=1)
+    # Pairwise co-bunk frequency excluding mass sessions
+    pair_weights: dict[tuple[str, str], int] = {}
+    for (d, period), bunk_list in session_bunkers.items():
+        if 1 < len(bunk_list) <= mass_cutoff:
+            for i in range(len(bunk_list)):
+                for j in range(i + 1, len(bunk_list)):
+                    u, v = sorted([bunk_list[i], bunk_list[j]])
+                    pair_weights[(u, v)] = pair_weights.get((u, v), 0) + 1
+
+    # Filter out casual coincidence noise: only add edges to G if weight >= min_weight
+    # Fallback to weight >= 2 only if graph would otherwise be empty
+    effective_thresh = min_weight
+    if effective_thresh > 2 and sum(1 for w in pair_weights.values() if w >= effective_thresh) == 0:
+        effective_thresh = 2
+
+    for (u, v), w in pair_weights.items():
+        if w >= effective_thresh:
+            G.add_edge(u, v, weight=w)
+
+    # Fetch statistically validated edges from derivation engine for high-confidence indicators
+    validated_edge_map: dict[tuple[str, str], dict[str, Any]] = {}
+    try:
+        skips_data = await derive_skips_with_edges(db, section_code=section_code)
+        for se in skips_data.get("edges", []):
+            validated_edge_map[(se["source"], se["target"])] = se
+            validated_edge_map[(se["target"], se["source"])] = se
+    except Exception:
+        pass
 
     # 6. Algorithmic computations: PageRank & Centrality
     if len(G.edges) > 0:
@@ -296,6 +330,9 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
     # Node: Class Representative (Level 3)
     cr_pr = pagerank.get(cr_student.id, 0.0)
     cr_bw = betweenness.get(cr_student.id, 0.0)
+    cr_stats = attendance_stats.get(cr_student.id, {"total": 0, "present": 0, "absent": 0})
+    cr_tot = cr_stats["total"]
+    cr_pct = round((cr_stats["present"] / cr_tot * 100), 1) if cr_tot > 0 else 100.0
     nodes_out.append({
         "id": cr_student.id,
         "roll_no": cr_student.roll_no,
@@ -306,9 +343,9 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
         "x": layout_coords[cr_student.id][0],
         "y": layout_coords[cr_student.id][1],
         "score": 92.0,
-        "attendance_pct": 100.0,
-        "total_classes": attendance_stats[cr_student.id]["total"],
-        "absences": 0,
+        "attendance_pct": cr_pct,
+        "total_classes": cr_tot,
+        "absences": cr_stats["absent"],
         "cohort": "Student Council / CR",
         "cohort_color": "#10b981",
         "betweenness": round(cr_bw, 3),
@@ -416,17 +453,27 @@ async def build_coabsence_graph(db: AsyncSession, section_code: str = "CS-3B") -
                 "label": rep_label,
             })
 
-    # Co-Absence Edges (Student <-> Student)
+    # Co-Absence Edges (Student <-> Student) - Neat & pruned
     for u, v, data in G.edges(data=True):
         weight = data.get("weight", 1)
+        if weight < effective_thresh:
+            continue
+        u_roll = student_id_to_roll.get(u, u)
+        v_roll = student_id_to_roll.get(v, v)
+        stat_info = validated_edge_map.get((u_roll, v_roll)) or validated_edge_map.get((u, v))
+        is_validated = stat_info is not None
+        lift = round(stat_info["props"]["lift"], 1) if stat_info and "props" in stat_info and "lift" in stat_info["props"] else None
+
         edges_out.append({
             "source": u,
             "target": v,
-            "source_roll": student_id_to_roll.get(u, u),
-            "target_roll": student_id_to_roll.get(v, v),
+            "source_roll": u_roll,
+            "target_roll": v_roll,
             "weight": weight,
             "type": "coabsence",
-            "label": f"{weight}x mutual absences",
+            "is_validated": is_validated,
+            "lift": lift,
+            "label": f"{weight}x mutual bunks" + (f" ({lift}x lift)" if lift else ""),
         })
 
     # Unique cohorts count
@@ -909,9 +956,9 @@ async def build_hierarchical_graph(db: AsyncSession, section_code: str = "CS-3B"
                 "label": "Studies With",
             })
 
-    # BUNKS_WITH (Co-absences >= 2)
+    # BUNKS_WITH (Co-absences >= 3)
     for (u, v), cnt in co_abs_counts.items():
-        if cnt >= 2:
+        if cnt >= 3:
             all_edges.append({
                 "source": u,
                 "target": v,

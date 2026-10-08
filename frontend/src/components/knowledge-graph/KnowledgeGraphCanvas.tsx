@@ -278,9 +278,9 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
         n.fy = null;
       });
       const chargeForce = fg.d3Force('charge');
-      if (chargeForce) chargeForce.strength(-280);
+      if (chargeForce) chargeForce.strength(-520);
       const linkForce = fg.d3Force('link');
-      if (linkForce) linkForce.distance(70);
+      if (linkForce) linkForce.distance(110);
       fg.d3ReheatSimulation();
     }
   }, [layoutMode, consolidatedGraphData.nodes, dimensions]);
@@ -445,25 +445,45 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     const tgt = link.target;
     if (!src || !tgt || src.x === undefined || tgt.x === undefined) return;
 
+    const srcId = String(typeof src === 'object' ? src.id : src);
+    const tgtId = String(typeof tgt === 'object' ? tgt.id : tgt);
+
     const isPathEdge = link.isPathEdge;
-    const isDimmed = pathEdgePairs !== null && !isPathEdge;
+    const isSelectedEdge = selectedNode ? (srcId === selectedNode.id || tgtId === selectedNode.id) : false;
+    const isHoveredEdge = hoveredNode ? (srcId === hoveredNode.id || tgtId === hoveredNode.id) : false;
+    const isDirectlyFocused = isPathEdge || isSelectedEdge || isHoveredEdge;
+    const isDimmed = (pathEdgePairs !== null && !isPathEdge) || ((selectedNode || hoveredNode) && !isDirectlyFocused);
+
+    const isBunkTie = link.type?.includes('BUNKS_WITH') || link.type?.includes('CO_ABSENT') || link.type?.includes('coabsence');
 
     ctx.save();
 
     if (isDimmed) {
-      ctx.globalAlpha = 0.12;
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 1 / globalScale;
+      ctx.globalAlpha = 0.04;
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 0.75 / globalScale;
     } else if (isPathEdge) {
       ctx.globalAlpha = 1.0;
       ctx.strokeStyle = '#00b4ff';
       ctx.lineWidth = 3.5 / globalScale;
       ctx.shadowColor = '#00b4ff';
+      ctx.shadowBlur = 16;
+    } else if (isSelectedEdge || isHoveredEdge) {
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = isBunkTie ? '#f43f5e' : '#38bdf8';
+      ctx.lineWidth = 3.0 / globalScale;
+      ctx.shadowColor = ctx.strokeStyle;
       ctx.shadowBlur = 14;
+    } else if (isBunkTie) {
+      // Subtle neat co-absence tie when not actively focused
+      ctx.globalAlpha = 0.30;
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = Math.max(0.8, Math.min(2.2, (link.weight || 1) * 0.7)) / globalScale;
     } else {
-      ctx.globalAlpha = 0.45;
+      // General relational edge
+      ctx.globalAlpha = 0.38;
       ctx.strokeStyle = '#475569';
-      ctx.lineWidth = Math.max(1, (link.weight || 1) * 1.5) / globalScale;
+      ctx.lineWidth = Math.max(1.0, Math.min(2.5, (link.weight || 1) * 0.8)) / globalScale;
     }
 
     // Draw edge line
@@ -472,8 +492,8 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     ctx.lineTo(tgt.x, tgt.y);
     ctx.stroke();
 
-    // Render consolidated link label centered on edge angle with dark pill background
-    if (globalScale > 0.85 && !isDimmed && link.type) {
+    // Render link label ONLY when directly focused (hovered/selected node or path), preventing label clutter!
+    if (isDirectlyFocused && link.type) {
       const midX = (src.x + tgt.x) / 2;
       const midY = (src.y + tgt.y) / 2;
       const angle = Math.atan2(tgt.y - src.y, tgt.x - src.x);
@@ -488,31 +508,31 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
       }
       ctx.rotate(textAngle);
 
-      const labelFontSize = Math.max(7, Math.min(10, 8.5 / Math.sqrt(globalScale)));
+      const labelFontSize = Math.max(8, Math.min(11, 9.5 / Math.sqrt(globalScale)));
       ctx.font = `600 ${labelFontSize}px Inter, monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       const labelText = link.type;
       const labelWidth = ctx.measureText(labelText).width;
-      const h = labelFontSize + 4;
-      const w = labelWidth + 6;
+      const h = labelFontSize + 6;
+      const w = labelWidth + 8;
 
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.9)';
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.92)';
       ctx.fillRect(-w / 2, -h / 2, w, h);
 
-      ctx.strokeStyle = isPathEdge ? '#00b4ff' : 'rgba(255, 255, 255, 0.12)';
-      ctx.lineWidth = 1 / globalScale;
+      ctx.strokeStyle = isBunkTie ? '#f43f5e' : '#00b4ff';
+      ctx.lineWidth = 1.2 / globalScale;
       ctx.strokeRect(-w / 2, -h / 2, w, h);
 
-      ctx.fillStyle = isPathEdge ? '#00b4ff' : '#94a3b8';
+      ctx.fillStyle = isBunkTie ? '#fda4af' : '#e0f2fe';
       ctx.fillText(labelText, 0, 0);
 
       ctx.restore();
     }
 
     ctx.restore();
-  }, [pathEdgePairs]);
+  }, [pathEdgePairs, selectedNode, hoveredNode]);
 
   return (
     <div
@@ -535,10 +555,23 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
         nodeCanvasObject={renderCustomNode}
         nodePointerAreaPaint={paintPointerArea}
         linkCanvasObject={renderCustomLink}
-        linkDirectionalParticles={isParticlesEnabled ? (link: any) => (link.isPathEdge ? 4 : 2) : 0}
-        linkDirectionalParticleSpeed={(link: any) => (link.isPathEdge ? 0.012 : 0.005)}
+        linkDirectionalParticles={isParticlesEnabled ? (link: any) => {
+          const sId = String(typeof link.source === 'object' ? link.source.id : link.source);
+          const tId = String(typeof link.target === 'object' ? link.target.id : link.target);
+          const isSel = selectedNode ? (sId === selectedNode.id || tId === selectedNode.id) : false;
+          const isHov = hoveredNode ? (sId === hoveredNode.id || tId === hoveredNode.id) : false;
+          if (link.isPathEdge) return 4;
+          if (isSel || isHov) return 3;
+          if (selectedNode || hoveredNode) return 0;
+          return 1;
+        } : 0}
+        linkDirectionalParticleSpeed={(link: any) => (link.isPathEdge ? 0.012 : 0.007)}
         linkDirectionalParticleWidth={(link: any) => (link.isPathEdge ? 3 : 2)}
-        linkDirectionalParticleColor={(link: any) => (link.isPathEdge ? '#00b4ff' : '#39ff14')}
+        linkDirectionalParticleColor={(link: any) => {
+          if (link.isPathEdge) return '#00b4ff';
+          const isBunk = link.type?.includes('BUNKS_WITH') || link.type?.includes('CO_ABSENT');
+          return isBunk ? '#f43f5e' : '#38bdf8';
+        }}
         onNodeClick={(node: any) => {
           onSelectNode(node);
           if (fgRef.current && node.x !== undefined && node.y !== undefined) {

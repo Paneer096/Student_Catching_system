@@ -638,8 +638,13 @@ class ApiClient {
   }
 
   // ── Knowledge Graph API (Prompt 3 Specifications) ──────────────────────
-  async getKnowledgeGraphData(section = 'CS-3B'): Promise<KnowledgeGraphData> {
-    return this.request<KnowledgeGraphData>(`/graph/data?section=${encodeURIComponent(section)}`);
+  async getKnowledgeGraphData(section = 'CS-3B', minWeight = 3, validatedOnly = false): Promise<KnowledgeGraphData> {
+    const params = new URLSearchParams({
+      section,
+      min_weight: String(minWeight),
+      validated_only: String(validatedOnly),
+    });
+    return this.request<KnowledgeGraphData>(`/graph/data?${params.toString()}`);
   }
 
   async getKnowledgeGraphShortestPath(source: string, target: string, section = 'CS-3B'): Promise<ShortestPathResult> {

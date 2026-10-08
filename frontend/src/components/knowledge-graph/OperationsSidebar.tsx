@@ -10,6 +10,16 @@ export interface OperationsSidebarProps {
   onToggleNodeType: (type: string) => void;
   onSelectAllNodeTypes: () => void;
   onClearAllNodeTypes: () => void;
+  // Neat Mode & Edge Filtering
+  neatMode?: boolean;
+  onToggleNeatMode?: () => void;
+  minCoabsenceWeight?: number;
+  onMinCoabsenceWeightChange?: (w: number) => void;
+  enabledEdgeTypes?: Set<string>;
+  onToggleEdgeType?: (type: string) => void;
+  onSelectAllEdgeTypes?: () => void;
+  onClearAllEdgeTypes?: () => void;
+  prunedEdgeCount?: number;
   // Pathfinder
   pathSource: string;
   onSetPathSource: (id: string) => void;
@@ -38,6 +48,15 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
   onToggleNodeType,
   onSelectAllNodeTypes,
   onClearAllNodeTypes,
+  neatMode = true,
+  onToggleNeatMode,
+  minCoabsenceWeight = 3,
+  onMinCoabsenceWeightChange,
+  enabledEdgeTypes = new Set(),
+  onToggleEdgeType,
+  onSelectAllEdgeTypes,
+  onClearAllEdgeTypes,
+  prunedEdgeCount = 0,
   pathSource,
   onSetPathSource,
   pathTarget,
@@ -249,10 +268,119 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
               })}
             </div>
 
+            {/* ── Co-Absence Density & Neat Controls ── */}
+            <div className="pt-2.5 border-t border-white/10 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] text-emerald-400">auto_awesome</span>
+                  Graph Tidiness
+                </span>
+                {onToggleNeatMode && (
+                  <button
+                    onClick={onToggleNeatMode}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all ${
+                      neatMode
+                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                        : 'bg-white/[0.04] border-white/10 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {neatMode ? 'NEAT ON' : 'DENSE'}
+                  </button>
+                )}
+              </div>
+
+              {/* Threshold Slider */}
+              {onMinCoabsenceWeightChange && (
+                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-2">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-gray-300">
+                    <span>Min Co-Absence Tie:</span>
+                    <span className="text-cyan-400 font-bold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                      ≥ {minCoabsenceWeight} mutual skips
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="6"
+                    step="1"
+                    value={minCoabsenceWeight}
+                    onChange={(e) => onMinCoabsenceWeightChange(parseInt(e.target.value, 10))}
+                    className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-gray-800 rounded-lg"
+                  />
+                  <div className="flex justify-between text-[9px] font-mono text-gray-400">
+                    <span>1 (Raw/Messy)</span>
+                    <span className="text-emerald-400 font-semibold">3 (Neat)</span>
+                    <span>6 (Strict)</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Edge Types Filter */}
+              {onToggleEdgeType && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-gray-400">
+                    <span className="font-semibold uppercase tracking-wider">Edge Types</span>
+                    <div className="flex gap-2 text-[10px]">
+                      {onSelectAllEdgeTypes && (
+                        <button onClick={onSelectAllEdgeTypes} className="hover:text-cyan-400 transition-colors">
+                          All
+                        </button>
+                      )}
+                      <span>·</span>
+                      {onClearAllEdgeTypes && (
+                        <button onClick={onClearAllEdgeTypes} className="hover:text-rose-400 transition-colors">
+                          None
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {edgeTypesList.map((etype) => {
+                      const isChecked = enabledEdgeTypes.size === 0 || enabledEdgeTypes.has(etype);
+                      const isBunkType = etype === 'BUNKS_WITH' || etype === 'CO_ABSENT';
+                      return (
+                        <label
+                          key={etype}
+                          className={`flex items-center justify-between p-1.5 px-2 rounded-lg border cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                              : 'bg-white/[0.01] border-transparent opacity-40 hover:opacity-70'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => onToggleEdgeType(etype)}
+                              className="rounded accent-cyan-500 text-[10px]"
+                            />
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: isBunkType ? '#f43f5e' : '#38bdf8' }}
+                            />
+                            <span className="text-gray-300 font-mono text-[10px] truncate">
+                              {etype}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="pt-2 border-t border-white/10 flex justify-between items-center text-[10px] font-mono text-gray-400">
               <span>Active Relational Edges:</span>
               <span className="text-cyan-400 font-bold">{edges.length}</span>
             </div>
+            {prunedEdgeCount > 0 && (
+              <div className="flex justify-between items-center text-[9.5px] font-mono text-emerald-400/90 bg-emerald-950/30 px-2 py-1 rounded-lg border border-emerald-500/20">
+                <span>Filtered Noise Ties:</span>
+                <span className="font-bold">+{prunedEdgeCount} casual pairs hidden</span>
+              </div>
+            )}
           </div>
         )}
 

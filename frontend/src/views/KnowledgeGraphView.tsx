@@ -45,6 +45,13 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   const [isPhysicsPaused, setIsPhysicsPaused] = useState<boolean>(false);
   const [isParticlesEnabled, setIsParticlesEnabled] = useState<boolean>(true);
 
+  // Neat Graph & Edge Filtering Controls
+  const [neatMode, setNeatMode] = useState<boolean>(true);
+  const [minCoabsenceWeight, setMinCoabsenceWeight] = useState<number>(3);
+  const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string>>(
+    () => new Set(DOMAIN_PRESETS.academic.edgeTypes)
+  );
+
   // Entity Type Filtering
   const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<string>>(
     () => new Set(Object.keys(DOMAIN_PRESETS.academic.nodeTypes))
@@ -68,29 +75,64 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     setHighlightedPath(null);
     setPathError(null);
 
-    // Initialize enabled node types for this preset
+    // Initialize enabled node and edge types for this preset
     setEnabledNodeTypes(new Set(Object.keys(preset.nodeTypes)));
+    setEnabledEdgeTypes(new Set(preset.edgeTypes));
 
     if (preset.id === 'academic') {
       try {
-        // Fetch live from FastAPI backend with NetworkX metrics
-        const liveData = await api.getKnowledgeGraphData(sectionCode);
+        // Fetch live from FastAPI backend with NetworkX metrics and neat threshold
+        const liveData = await api.getKnowledgeGraphData(sectionCode, minCoabsenceWeight, neatMode);
         if (liveData && liveData.nodes && liveData.nodes.length > 0) {
-          // Merge live nodes with preset extra relational nodes/edges for maximum visual richness
           const liveNodeIds = new Set(liveData.nodes.map((n) => n.id));
-          const extraNodes = preset.nodes.filter((n) => !liveNodeIds.has(n.id));
-          const allNodes = [...liveData.nodes, ...extraNodes];
+          const liveStudentCount = liveData.nodes.filter((n) => n.type === 'Student').length;
 
+          // Avoid ghost duplicate students from presets if live students already exist
+          const extraNodes = preset.nodes.filter((n) => {
+            if (liveStudentCount > 0 && n.type === 'Student') return false;
+            return !liveNodeIds.has(n.id);
+          });
+          const allNodes = [...liveData.nodes, ...extraNodes];
           const allNodeIdSet = new Set(allNodes.map((n) => n.id));
+
+          // Index live students by roll number for re-mapping preset edges
+          const rollToLiveId = new Map<string, string>();
+          liveData.nodes.forEach((n) => {
+            const roll = n.properties?.roll_no || (n.label?.match(/\(([^)]+)\)/)?.[1]) || n.id;
+            if (roll) {
+              const cleaned = roll.trim().toUpperCase();
+              rollToLiveId.set(cleaned, n.id);
+              const m = cleaned.match(/\d+$/);
+              if (m) rollToLiveId.set(m[0], n.id);
+            }
+          });
+
           const liveEdges = (liveData.edges || []).filter(
             (e) => allNodeIdSet.has(String(e.source)) && allNodeIdSet.has(String(e.target))
           );
-          const extraEdges = preset.edges.filter(
-            (e) => allNodeIdSet.has(e.source) && allNodeIdSet.has(e.target)
-          );
+
+          // Remap preset relational ties (e.g. course enrollment, club memberships, mentorships)
+          const mappedExtraEdges: CanvasEdge[] = [];
+          preset.edges.forEach((e) => {
+            let src = e.source;
+            let tgt = e.target;
+            if (src.startsWith('stu-')) {
+              const suffix = src.replace('stu-', '');
+              const liveId = rollToLiveId.get(`21CSB${suffix}`) || rollToLiveId.get(suffix);
+              if (liveId) src = liveId;
+            }
+            if (tgt.startsWith('stu-')) {
+              const suffix = tgt.replace('stu-', '');
+              const liveId = rollToLiveId.get(`21CSB${suffix}`) || rollToLiveId.get(suffix);
+              if (liveId) tgt = liveId;
+            }
+            if (allNodeIdSet.has(src) && allNodeIdSet.has(tgt)) {
+              mappedExtraEdges.push({ ...e, source: src, target: tgt });
+            }
+          });
 
           setRawNodes(allNodes);
-          setRawEdges([...liveEdges, ...extraEdges]);
+          setRawEdges([...liveEdges, ...mappedExtraEdges]);
           setLoading(false);
           return;
         }
@@ -103,7 +145,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     setRawNodes(preset.nodes);
     setRawEdges(preset.edges);
     setLoading(false);
-  }, []);
+  }, [minCoabsenceWeight, neatMode]);
 
   useEffect(() => {
     loadDomainData(activeDomain, currentSection);
@@ -151,7 +193,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     return () => clearInterval(interval);
   }, [isTimelinePlaying, timelineRange]);
 
-  // Filtered Nodes & Edges based on Entity Types & Timeline
+  // Filtered Nodes & Edges based on Entity Types, Edge Types & Timeline
   const filteredData = useMemo(() => {
     const activeNodes = rawNodes.filter((n) => enabledNodeTypes.has(n.type));
     const activeNodeIdSet = new Set(activeNodes.map((n) => n.id));
@@ -160,6 +202,25 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
       const srcId = String(typeof e.source === 'object' ? e.source.id : e.source);
       const tgtId = String(typeof e.target === 'object' ? e.target.id : e.target);
       if (!activeNodeIdSet.has(srcId) || !activeNodeIdSet.has(tgtId)) return false;
+
+      // Filter by edge type
+      const isCoabsence = e.type === 'BUNKS_WITH' || e.type === 'CO_ABSENT' || e.type === 'coabsence';
+      if (isCoabsence) {
+        if (!enabledEdgeTypes.has('BUNKS_WITH') && !enabledEdgeTypes.has('CO_ABSENT')) {
+          return false;
+        }
+        const weight = e.weight ?? 1;
+        if (weight < minCoabsenceWeight) {
+          return false;
+        }
+        if (neatMode && weight < 3) {
+          return false;
+        }
+      } else {
+        if (enabledEdgeTypes.size > 0 && !enabledEdgeTypes.has(e.type)) {
+          return false;
+        }
+      }
 
       // Filter by timeline timestamp if valid
       if (timelineRange && e.timestamp) {
@@ -186,7 +247,11 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     }));
 
     return { nodes: enrichedNodes, edges: activeEdges };
-  }, [rawNodes, rawEdges, enabledNodeTypes, timelineRange]);
+  }, [rawNodes, rawEdges, enabledNodeTypes, enabledEdgeTypes, minCoabsenceWeight, neatMode, timelineRange]);
+
+  const prunedEdgeCount = useMemo(() => {
+    return Math.max(0, rawEdges.length - filteredData.edges.length);
+  }, [rawEdges.length, filteredData.edges.length]);
 
   // Shortest Path Calculation (Dijkstra / BFS with Backend or Client Fallback)
   const handleCalculatePath = async (sourceId: string, targetId: string) => {
@@ -368,6 +433,8 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
         nodes={filteredData.nodes}
         onSelectNode={handleSelectNode}
         onFocusNode={(nodeId) => canvasRef.current?.focusNode(nodeId)}
+        neatMode={neatMode}
+        onToggleNeatMode={() => setNeatMode((prev) => !prev)}
       />
 
       {/* ── Main Canvas Viewport ── */}
@@ -447,6 +514,26 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           onClearAllNodeTypes={() => {
             setEnabledNodeTypes(new Set());
           }}
+          neatMode={neatMode}
+          onToggleNeatMode={() => setNeatMode((prev) => !prev)}
+          minCoabsenceWeight={minCoabsenceWeight}
+          onMinCoabsenceWeightChange={setMinCoabsenceWeight}
+          enabledEdgeTypes={enabledEdgeTypes}
+          onToggleEdgeType={(type) => {
+            setEnabledEdgeTypes((prev) => {
+              const next = new Set(prev);
+              if (next.has(type)) next.delete(type);
+              else next.add(type);
+              return next;
+            });
+          }}
+          onSelectAllEdgeTypes={() => {
+            setEnabledEdgeTypes(new Set(activeDomain.edgeTypes));
+          }}
+          onClearAllEdgeTypes={() => {
+            setEnabledEdgeTypes(new Set());
+          }}
+          prunedEdgeCount={prunedEdgeCount}
           pathSource={pathSource}
           onSetPathSource={setPathSource}
           pathTarget={pathTarget}

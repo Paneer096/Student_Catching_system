@@ -14,6 +14,8 @@ export interface TopTacticalBarProps {
   nodes: CanvasNode[];
   onSelectNode: (node: CanvasNode) => void;
   onFocusNode: (nodeId: string) => void;
+  neatMode?: boolean;
+  onToggleNeatMode?: () => void;
 }
 
 export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
@@ -28,6 +30,8 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
   nodes,
   onSelectNode,
   onFocusNode,
+  neatMode = true,
+  onToggleNeatMode,
 }) => {
   const [showDomainDropdown, setShowDomainDropdown] = useState(false);
   const [searchCategory, setSearchCategory] = useState<'all' | 'primary' | 'connections'>('all');
@@ -192,6 +196,26 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
               <option value="EC-4A" className="bg-gray-900 text-white">EC-4A</option>
             </select>
           </div>
+        )}
+
+        {/* Neat Graph Quick Toggle */}
+        {onToggleNeatMode && (
+          <button
+            onClick={onToggleNeatMode}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-semibold border transition-all ${
+              neatMode
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                : 'bg-white/[0.04] border-white/10 text-gray-400 hover:text-white'
+            }`}
+            title={neatMode ? 'Neat Mode Active (Filtering casual co-absence noise)' : 'Dense Mode (Showing all raw co-absences)'}
+          >
+            <span className="material-symbols-outlined text-[15px] text-emerald-400">
+              {neatMode ? 'auto_awesome' : 'scatter_plot'}
+            </span>
+            <span className="hidden sm:inline">
+              {neatMode ? 'NEAT VIEW' : 'DENSE VIEW'}
+            </span>
+          </button>
         )}
 
         {/* Domain Preset Switcher */}

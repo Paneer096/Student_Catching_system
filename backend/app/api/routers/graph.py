@@ -200,9 +200,14 @@ async def get_student_profile(
 # Interactive Knowledge Graph Service Endpoints (Prompt 3 Specifications)
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def _build_knowledge_nx_graph(db: AsyncSession, section: str = "CS-3B") -> tuple[nx.Graph, list[dict], list[dict]]:
+async def _build_knowledge_nx_graph(
+    db: AsyncSession,
+    section: str = "CS-3B",
+    min_weight: int = 3,
+    validated_only: bool = False,
+) -> tuple[nx.Graph, list[dict], list[dict]]:
     """Helper to assemble a unified NetworkX Graph from database + dynamic injections."""
-    co_graph = await build_coabsence_graph(db, section)
+    co_graph = await build_coabsence_graph(db, section, min_weight=min_weight)
     G = nx.Graph()
 
     type_mapping = {
@@ -232,9 +237,12 @@ async def _build_knowledge_nx_graph(db: AsyncSession, section: str = "CS-3B") ->
         src = str(e.get("source", ""))
         tgt = str(e.get("target", ""))
         if src in node_id_set and tgt in node_id_set:
+            is_val = e.get("is_validated", False)
+            if validated_only and e.get("type") == "coabsence" and not is_val:
+                continue
             w = float(e.get("weight", 1.0))
-            etype = "CO_ABSENT" if e.get("type") == "coabsence" else "SUPERVISES"
-            G.add_edge(src, tgt, weight=w, type=etype)
+            etype = "BUNKS_WITH" if e.get("type") == "coabsence" else "SUPERVISES"
+            G.add_edge(src, tgt, weight=w, type=etype, is_validated=is_val, lift=e.get("lift"))
 
     # Incorporate dynamic user-created nodes & edges
     for dn in _dynamic_nodes:
@@ -296,8 +304,14 @@ async def _build_knowledge_nx_graph(db: AsyncSession, section: str = "CS-3B") ->
             "target": v,
             "type": data.get("type", "CONNECTED_TO"),
             "weight": round(data.get("weight", 1.0), 2),
+            "is_validated": data.get("is_validated", False),
+            "lift": data.get("lift"),
             "timestamp": "2026-10-08T00:00:00Z",
-            "properties": {"weight": data.get("weight", 1.0)},
+            "properties": {
+                "weight": data.get("weight", 1.0),
+                "is_validated": data.get("is_validated", False),
+                "lift": data.get("lift"),
+            },
         })
 
     return G, nodes_out, edges_out
@@ -306,6 +320,8 @@ async def _build_knowledge_nx_graph(db: AsyncSession, section: str = "CS-3B") ->
 @router.get("/data")
 async def get_knowledge_graph_data(
     section: str = Query(default="CS-3B", description="Section code"),
+    min_weight: int = Query(default=3, ge=1, le=20, description="Minimum mutual absences threshold"),
+    validated_only: bool = Query(default=False, description="Filter to statistically validated ties only"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -315,7 +331,9 @@ async def get_knowledge_graph_data(
     - Louvain Community detection cluster IDs
     - Multi-entity relational data
     """
-    _, nodes, edges = await _build_knowledge_nx_graph(db, section)
+    _, nodes, edges = await _build_knowledge_nx_graph(
+        db, section, min_weight=min_weight, validated_only=validated_only
+    )
     return {
         "nodes": nodes,
         "edges": edges,
@@ -323,6 +341,8 @@ async def get_knowledge_graph_data(
             "node_count": len(nodes),
             "edge_count": len(edges),
             "section": section,
+            "min_weight": min_weight,
+            "validated_only": validated_only,
             "status": "ONLINE",
         },
     }
