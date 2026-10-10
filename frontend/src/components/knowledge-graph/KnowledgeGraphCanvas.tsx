@@ -197,33 +197,11 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
       const layerOrder: Record<string, number> = {
         Classroom: 0,
         Institution: 0,
-        Threat_Actor: 0,
-        Disease: 0,
-        Factory: 0,
         Faculty: 1,
-        Vulnerability_CVE: 1,
-        Gene: 1,
-        Supplier: 1,
-        Author: 1,
         Course: 2,
-        Malware_Hash: 2,
-        Drug_Compound: 2,
-        Shipping_Route: 2,
-        Paper: 2,
         Student: 3,
-        Host_Machine: 3,
-        Patient: 3,
-        Warehouse: 3,
-        Topic: 3,
         Incident: 4,
-        IP_Address: 4,
-        Clinical_Trial: 4,
-        Raw_Material: 4,
-        Patent: 4,
         Club: 4,
-        Domain_Name: 4,
-        Symptom: 4,
-        Disruption_Event: 4,
       };
 
       const nodesByLayer: Record<number, CanvasNode[]> = {};
@@ -390,7 +368,7 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     ctx.fillText(glyph, node.x, node.y + 0.5);
 
     // Crown / Hub Badge for top PageRank entities
-    const isHub = (node.pagerank || 0) >= 0.072 || node.type === 'Classroom' || node.type === 'Threat_Actor';
+    const isHub = (node.pagerank || 0) >= 0.072 || node.type === 'Classroom' || node.type === 'Faculty';
     if (isHub && !isDimmed) {
       ctx.beginPath();
       const badgeY = node.y - radius - 5;

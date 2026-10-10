@@ -27,8 +27,8 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
 }) => {
   const canvasRef = useRef<KnowledgeGraphCanvasRef>(null);
 
-  // Active Domain Preset
-  const [activeDomain, setActiveDomain] = useState<DomainPreset>(DOMAIN_PRESETS.academic);
+  // Active Domain Preset (Dedicated to Classroom & Academic Intelligence)
+  const activeDomain: DomainPreset = DOMAIN_PRESETS.academic;
   const [currentSection, setCurrentSection] = useState<string>(activeSection);
 
   // Graph Data State
@@ -442,9 +442,6 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
         nodeCount={filteredData.nodes.length}
         edgeCount={filteredData.edges.length}
         activeDomain={activeDomain}
-        onSelectDomain={(preset) => {
-          setActiveDomain(preset);
-        }}
         activeSection={currentSection}
         onSectionChange={setCurrentSection}
         searchQuery={searchQuery}

@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CanvasNode } from './KnowledgeGraphCanvas';
-import { DOMAIN_PRESETS, DomainPreset } from './domainPresets';
+import { DomainPreset } from './domainPresets';
 
 export interface TopTacticalBarProps {
   nodeCount: number;
   edgeCount: number;
   activeDomain: DomainPreset;
-  onSelectDomain: (preset: DomainPreset) => void;
   activeSection: string;
   onSectionChange: (sec: string) => void;
   searchQuery: string;
@@ -22,7 +21,6 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
   nodeCount,
   edgeCount,
   activeDomain,
-  onSelectDomain,
   activeSection,
   onSectionChange,
   searchQuery,
@@ -33,7 +31,6 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
   neatMode = true,
   onToggleNeatMode,
 }) => {
-  const [showDomainDropdown, setShowDomainDropdown] = useState(false);
   const [searchCategory, setSearchCategory] = useState<'all' | 'primary' | 'connections'>('all');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -51,7 +48,7 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
         if (!matchesText) return false;
 
         if (searchCategory === 'primary') {
-          return (n.pagerank || 0) >= 0.06 || n.type === 'Classroom' || n.type === 'Threat_Actor' || n.type === 'Disease';
+          return (n.pagerank || 0) >= 0.06 || n.type === 'Classroom' || n.type === 'Faculty';
         }
         if (searchCategory === 'connections') {
           return (n.degree || 0) >= 3;
@@ -218,59 +215,14 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
           </button>
         )}
 
-        {/* Domain Preset Switcher */}
-        <div className="relative">
-          <button
-            onClick={() => setShowDomainDropdown((prev) => !prev)}
-            className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.1] border border-white/15 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-all shadow-xs"
-          >
-            <span className="material-symbols-outlined text-[17px] text-cyan-400">
-              {activeDomain.icon}
-            </span>
-            <span className="truncate max-w-[140px] hidden md:inline">
-              {activeDomain.name}
-            </span>
-            <span className="material-symbols-outlined text-[15px] text-gray-400">
-              expand_more
-            </span>
-          </button>
-
-          {showDomainDropdown && (
-            <div className="absolute right-0 top-full mt-1.5 w-72 bg-black/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5">
-              <div className="p-2.5 bg-white/[0.02]">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400">
-                  Select Domain Knowledge Graph
-                </span>
-              </div>
-              {Object.values(DOMAIN_PRESETS).map((preset) => {
-                const isActive = preset.id === activeDomain.id;
-                return (
-                  <div
-                    key={preset.id}
-                    onClick={() => {
-                      onSelectDomain(preset);
-                      setShowDomainDropdown(false);
-                    }}
-                    className={`p-3 cursor-pointer transition-colors flex items-start gap-2.5 ${
-                      isActive ? 'bg-cyan-500/15 border-l-2 border-cyan-400' : 'hover:bg-white/[0.06]'
-                    }`}
-                  >
-                    <span className={`material-symbols-outlined text-[20px] mt-0.5 ${isActive ? 'text-cyan-400' : 'text-gray-400'}`}>
-                      {preset.icon}
-                    </span>
-                    <div className="overflow-hidden">
-                      <div className={`text-xs font-bold ${isActive ? 'text-cyan-300' : 'text-white'}`}>
-                        {preset.name}
-                      </div>
-                      <div className="text-[10.5px] text-gray-400 leading-snug line-clamp-2 mt-0.5">
-                        {preset.description}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        {/* Domain Indicator (Dedicated to Classroom & Academic Intelligence) */}
+        <div className="flex items-center gap-2 bg-white/[0.06] border border-white/15 px-3 py-1.5 rounded-xl text-xs font-semibold text-white shadow-xs">
+          <span className="material-symbols-outlined text-[17px] text-cyan-400">
+            school
+          </span>
+          <span className="truncate hidden sm:inline text-cyan-300">
+            Classroom & Academic Intelligence
+          </span>
         </div>
       </div>
     </div>

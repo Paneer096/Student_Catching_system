@@ -285,9 +285,9 @@ The graph engine classifies students into three functional roles based on betwee
 
 ---
 
-## 8. Multi-Domain Knowledge Ontology
+## 8. Classroom & Academic Knowledge Ontology
 
-In addition to live classroom attendance data, Makerov supports an extensible domain ontology (`domainPresets.ts`) allowing the Knowledge Graph to visualize cyber security forensics, biomedical genomics, and institutional hierarchies.
+Makerov's Knowledge Graph is purpose-built and exclusively configured for **Classroom & Academic Intelligence** in college environments (`domainPresets.ts`). Non-college domains (such as cyber threat forensics, biomedical genomics, and financial tracking) have been eliminated to ensure pure alignment with institutional and academic workflows.
 
 ```
        ┌────────────────────────┐
