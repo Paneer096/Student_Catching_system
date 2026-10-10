@@ -5,7 +5,6 @@ import { RoleSwitcherModal } from './components/layout/RoleSwitcherModal';
 
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
-import { GraphView } from './views/GraphView';
 import { KnowledgeGraphView } from './views/KnowledgeGraphView';
 import { DataIngestionView } from './views/DataIngestionView';
 import { AlertsView } from './views/AlertsView';
@@ -172,16 +171,9 @@ export default function App() {
             />
           )}
 
-          {activeView === 'graph' && (
-            <GraphView
-              initialStudentId={selectedStudentId}
-              onNavigate={handleNavigate}
-              activeSection={activeSection}
-            />
-          )}
-
-          {activeView === 'knowledge-graph' && (
+          {(activeView === 'knowledge-graph' || activeView === 'graph') && (
             <KnowledgeGraphView
+              initialStudentId={selectedStudentId}
               onNavigate={handleNavigate}
               activeSection={activeSection}
               onSelectStudent={setSelectedStudentId}

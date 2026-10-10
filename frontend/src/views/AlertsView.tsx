@@ -235,9 +235,9 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
                   <button
                     onClick={() => {
                       if (bunk.structural_anchor) {
-                        onNavigate('graph', { studentId: bunk.structural_anchor.roll_no });
+                        onNavigate('knowledge-graph', { studentId: bunk.structural_anchor.roll_no });
                       } else {
-                        onNavigate('graph');
+                        onNavigate('knowledge-graph');
                       }
                     }}
                     className="px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"

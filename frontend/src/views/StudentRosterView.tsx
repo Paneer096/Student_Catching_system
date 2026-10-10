@@ -525,11 +525,11 @@ export const StudentRosterView: React.FC<StudentRosterViewProps> = ({
 
               {/* Explicit button to view in Knowledge Graph if the teacher deliberately wants it */}
               <button
-                onClick={() => onNavigate('graph', { studentId: dossier.roll_no })}
+                onClick={() => onNavigate('knowledge-graph', { studentId: dossier.roll_no })}
                 className="py-2 px-3 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface text-xs font-semibold hover:bg-surface-container transition-colors cursor-pointer inline-flex items-center gap-1"
-                title="Open in Hierarchical Knowledge Graph"
+                title="Open in Knowledge Graph"
               >
-                <span className="material-symbols-outlined text-[16px]">hub</span>
+                <span className="material-symbols-outlined text-[16px]">account_tree</span>
                 <span>Graph</span>
               </button>
             </div>

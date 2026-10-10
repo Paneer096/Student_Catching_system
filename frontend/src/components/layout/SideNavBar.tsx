@@ -23,7 +23,6 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'students', label: 'Students (Roster)', icon: 'groups' },
-    { id: 'graph', label: 'Network Analysis', icon: 'hub' },
     { id: 'knowledge-graph', label: 'Knowledge Graph', icon: 'account_tree' },
     { id: 'calendar', label: 'Calendar Risk', icon: 'calendar_month' },
     { id: 'ingestion', label: 'Data Ingestion', icon: 'upload_file' },

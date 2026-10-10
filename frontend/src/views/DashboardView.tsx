@@ -141,10 +141,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onNavigate('graph')}
+            onClick={() => onNavigate('knowledge-graph')}
             className="px-3 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-semibold hover:opacity-90 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px]">hub</span>
+            <span className="material-symbols-outlined text-[16px]">account_tree</span>
             Open Knowledge Graph
           </button>
           <button
@@ -199,21 +199,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Priority Absence Cohorts */}
         <div
-          onClick={() => onNavigate('graph')}
+          onClick={() => onNavigate('knowledge-graph')}
           className="p-4 bg-surface-container-lowest border border-outline-variant hover:border-primary/50 rounded-xl shadow-2xs flex flex-col justify-between cursor-pointer transition-colors group"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider">
               Student Cohorts
             </span>
-            <span className="material-symbols-outlined text-[16px] text-primary">hub</span>
+            <span className="material-symbols-outlined text-[16px] text-primary">account_tree</span>
           </div>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-primary">{summary.cohorts_count}</span>
             <span className="text-[11px] text-on-surface-variant">cliques</span>
           </div>
           <span className="text-[10px] text-primary group-hover:underline mt-1.5 flex items-center gap-0.5">
-            Inspect network graph &rarr;
+            Inspect knowledge graph &rarr;
           </span>
         </div>
 
@@ -248,10 +248,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Flagged Co-Absence Cohorts
             </h2>
             <button
-              onClick={() => onNavigate('graph')}
+              onClick={() => onNavigate('knowledge-graph')}
               className="text-[11px] text-primary font-semibold hover:underline flex items-center"
             >
-              Graph View &rarr;
+              Knowledge Graph &rarr;
             </button>
           </div>
 
@@ -294,7 +294,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <button
                         onClick={() => {
                           onSelectStudent?.(cohort.anchor_roll || cohort.top_peer);
-                          onNavigate('graph', { studentId: cohort.anchor_roll });
+                          onNavigate('knowledge-graph', { studentId: cohort.anchor_roll });
                         }}
                         className="px-2.5 py-1 bg-surface-container hover:bg-primary hover:text-on-primary rounded text-[11px] font-semibold text-on-surface transition-colors cursor-pointer shrink-0"
                       >

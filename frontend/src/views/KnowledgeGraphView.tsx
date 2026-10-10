@@ -16,12 +16,14 @@ export interface KnowledgeGraphViewProps {
   onNavigate: (viewId: string, params?: any) => void;
   activeSection?: string;
   onSelectStudent?: (studentId: string) => void;
+  initialStudentId?: string;
 }
 
 export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   onNavigate,
   activeSection = 'CS-3B',
   onSelectStudent,
+  initialStudentId,
 }) => {
   const canvasRef = useRef<KnowledgeGraphCanvasRef>(null);
 
@@ -39,6 +41,23 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   const [hoveredNode, setHoveredNode] = useState<CanvasNode | null>(null);
   const [isPinned, setIsPinned] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Auto-focus initial student if passed from dashboard or roster
+  useEffect(() => {
+    if (!initialStudentId || rawNodes.length === 0) return;
+    const target = rawNodes.find(
+      (n) =>
+        n.id === initialStudentId ||
+        n.properties?.roll_no === initialStudentId ||
+        n.label?.toLowerCase().includes(initialStudentId.toLowerCase())
+    );
+    if (target) {
+      setSelectedNode(target);
+      setTimeout(() => {
+        canvasRef.current?.focusNode(target.id);
+      }, 250);
+    }
+  }, [initialStudentId, rawNodes]);
 
   // Visualization & Layout Controls
   const [layoutMode, setLayoutMode] = useState<'force' | 'hierarchical' | 'radial'>('force');
@@ -488,7 +507,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
               const roll = targetNode.properties?.roll_no || targetNode.id;
               onNavigate('students', { studentId: roll });
             } else {
-              onNavigate('graph');
+              canvasRef.current?.focusNode(targetNode.id);
             }
           }}
         />
