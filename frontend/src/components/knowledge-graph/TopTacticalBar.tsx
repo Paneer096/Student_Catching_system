@@ -15,6 +15,9 @@ export interface TopTacticalBarProps {
   onFocusNode: (nodeId: string) => void;
   neatMode?: boolean;
   onToggleNeatMode?: () => void;
+  showWholeClass?: boolean;
+  onToggleWholeClass?: () => void;
+  totalClassCount?: number;
 }
 
 export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
@@ -30,6 +33,9 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
   onFocusNode,
   neatMode = true,
   onToggleNeatMode,
+  showWholeClass = false,
+  onToggleWholeClass,
+  totalClassCount,
 }) => {
   const [searchCategory, setSearchCategory] = useState<'all' | 'primary' | 'connections'>('all');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -193,6 +199,26 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
               <option value="EC-4A" className="bg-gray-900 text-white">EC-4A</option>
             </select>
           </div>
+        )}
+
+        {/* Whole Class vs Focused Tied Bunks Toggle */}
+        {onToggleWholeClass && (
+          <button
+            onClick={onToggleWholeClass}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono font-semibold border transition-all ${
+              showWholeClass
+                ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                : 'bg-white/[0.04] border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+            }`}
+            title={showWholeClass ? 'Whole Class Mode Active: Showing all students with bunk connections' : 'Focused Mode: Showing only students with validated bunk ties'}
+          >
+            <span className="material-symbols-outlined text-[15px] text-cyan-400">
+              {showWholeClass ? 'groups' : 'hub'}
+            </span>
+            <span className="font-bold">
+              {showWholeClass ? `WHOLE CLASS (${totalClassCount || nodeCount})` : 'TIED PAIRS ONLY'}
+            </span>
+          </button>
         )}
 
         {/* Neat Graph Quick Toggle */}

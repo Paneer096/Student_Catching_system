@@ -19,7 +19,7 @@ async def parse_and_ingest_students_csv(db: AsyncSession, csv_content: str) -> d
     if not reader.fieldnames:
         raise ValueError("Students CSV is empty.")
 
-    required_fields = {"roll_no", "name", "section_code", "branch", "year", "dob"}
+    required_fields = {"roll_no", "name", "section_code"}
     missing = required_fields - set(reader.fieldnames)
     if missing:
         raise ValueError(f"Missing required columns in Students CSV: {', '.join(missing)}")
@@ -33,16 +33,16 @@ async def parse_and_ingest_students_csv(db: AsyncSession, csv_content: str) -> d
         roll_no = row["roll_no"].strip().upper()
         name = row["name"].strip()
         sec_code = row["section_code"].strip()
-        branch = row["branch"].strip()
-        year = int(row["year"].strip())
-        raw_dob = row["dob"].strip()
-        parsed_dob = datetime.strptime(raw_dob, "%Y-%m-%d").date()
-        gender = row.get("gender", "M").strip()
+        branch = row.get("branch", "").strip() or "CSE"
+        year = int(row["year"].strip()) if row.get("year", "").strip() else 3
+        raw_dob = row.get("dob", "").strip()
+        parsed_dob = datetime.strptime(raw_dob, "%Y-%m-%d").date() if raw_dob else None
+        gender = row.get("gender", "").strip() or None
 
         section_id = sections.get(sec_code)
         if not section_id:
             # Create section if not exists
-            new_sec = Section(code=sec_code, semester=year * 2 - 1, strength=60, department=branch)
+            new_sec = Section(code=sec_code, semester=year * 2 - 1 if year else 5, strength=60, department=branch)
             db.add(new_sec)
             await db.flush()
             section_id = new_sec.id

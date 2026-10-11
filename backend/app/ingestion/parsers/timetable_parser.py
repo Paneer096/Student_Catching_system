@@ -35,7 +35,7 @@ async def parse_and_ingest_timetable_csv(db: AsyncSession, csv_content: str) -> 
         subj_code = row["subject_code"].strip().upper()
         teacher_id = row["teacher_id"].strip()
         is_lab = row.get("is_lab", "").strip().lower() in ("true", "1", "yes")
-        room = row.get("room", "Room 201").strip()
+        room = row.get("room", "").strip() or None
 
         section_id = sections.get(sec_code)
         if not section_id:

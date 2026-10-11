@@ -37,6 +37,23 @@ export interface OperationsSidebarProps {
   onTimelineChange: (val: number) => void;
   isTimelinePlaying: boolean;
   onToggleTimelinePlay: () => void;
+  // Bunk Engine & Classroom Controls
+  groups?: Array<{ group_id: number; members: string[]; n_edges: number; mean_weight: number }>;
+  showWholeClass?: boolean;
+  onToggleWholeClass?: () => void;
+  totalClassCount?: number;
+  sensitivity?: 'strict' | 'balanced' | 'exploratory';
+  onSensitivityChange?: (s: 'strict' | 'balanced' | 'exploratory') => void;
+  selectedOverlays?: string[];
+  onToggleOverlay?: (overlay: string) => void;
+  studentsWithoutTies?: Array<{ roll_no: string; name: string; bunk_cells: number }>;
+  onFocusNode?: (nodeId: string) => void;
+  anonymizeNames?: boolean;
+  onToggleAnonymizeNames?: () => void;
+  includeDismissed?: boolean;
+  onToggleIncludeDismissed?: () => void;
+  subjectFilter?: string;
+  onSubjectFilterChange?: (sub: string) => void;
 }
 
 export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
@@ -71,9 +88,35 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
   onTimelineChange,
   isTimelinePlaying,
   onToggleTimelinePlay,
+  groups = [],
+  showWholeClass = false,
+  onToggleWholeClass,
+  totalClassCount,
+  sensitivity = 'strict',
+  onSensitivityChange,
+  selectedOverlays = [],
+  onToggleOverlay,
+  studentsWithoutTies = [],
+  onFocusNode,
+  anonymizeNames = false,
+  onToggleAnonymizeNames,
+  includeDismissed = false,
+  onToggleIncludeDismissed,
+  subjectFilter = '',
+  onSubjectFilterChange,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'entities' | 'pathfinder' | 'editor' | 'timeline'>('entities');
+  const [activeTab, setActiveTab] = useState<'entities' | 'rings' | 'pathfinder' | 'timeline' | 'editor'>('entities');
+
+  const GROUP_PALETTE = [
+    '#f97316', // Orange / Amber
+    '#06b6d4', // Cyan
+    '#a855f7', // Purple
+    '#10b981', // Emerald
+    '#ec4899', // Pink
+    '#eab308', // Yellow
+    '#3b82f6', // Blue
+  ];
 
   // Form states for Editor tab
   const [newNodeId, setNewNodeId] = useState('');
@@ -176,6 +219,16 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
             Entities
           </button>
           <button
+            onClick={() => setActiveTab('rings')}
+            className={`py-1 rounded-lg font-semibold transition-all ${
+              activeTab === 'rings'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Rings {groups.length > 0 ? `(${groups.length})` : ''}
+          </button>
+          <button
             onClick={() => setActiveTab('pathfinder')}
             className={`py-1 rounded-lg font-semibold transition-all ${
               activeTab === 'pathfinder'
@@ -184,16 +237,6 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
             }`}
           >
             Path
-          </button>
-          <button
-            onClick={() => setActiveTab('editor')}
-            className={`py-1 rounded-lg font-semibold transition-all ${
-              activeTab === 'editor'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Editor
           </button>
           <button
             onClick={() => setActiveTab('timeline')}
@@ -213,6 +256,95 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
         {/* ── 1. ENTITIES TAB ── */}
         {activeTab === 'entities' && (
           <div className="space-y-3">
+            {/* Show Whole Class Quick Action Toggle */}
+            {onToggleWholeClass && (
+              <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">groups</span>
+                  <div>
+                    <div className="text-[11px] font-bold text-white font-mono">Show Whole Class</div>
+                    <div className="text-[9px] text-gray-400">
+                      {showWholeClass ? `All ${totalClassCount || nodes.length} students on canvas` : 'Tied bunk partners only'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onToggleWholeClass}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all ${
+                    showWholeClass
+                      ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                      : 'bg-white/10 text-gray-300 border-white/20 hover:text-white'
+                  }`}
+                >
+                  {showWholeClass ? 'ACTIVE' : 'OFF'}
+                </button>
+              </div>
+            )}
+
+            {/* Engine Sensitivity Threshold */}
+            {onSensitivityChange && (
+              <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-1.5">
+                <div className="flex justify-between items-center text-[10px] font-mono text-gray-300">
+                  <span className="text-gray-400 font-semibold uppercase">Sensitivity Tier:</span>
+                  <span className="text-cyan-400 font-bold uppercase">{sensitivity}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['strict', 'balanced', 'exploratory'] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onSensitivityChange(s)}
+                      className={`py-1 text-[10px] font-mono rounded-lg border capitalize transition-all ${
+                        sensitivity === s
+                          ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-xs'
+                          : 'bg-white/[0.02] border-white/10 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Social & Context Overlays */}
+            {onToggleOverlay && (
+              <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-1.5">
+                <div className="text-[10px] font-mono text-gray-400 font-semibold uppercase tracking-wider">
+                  Corroborating Overlays
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'NAMED_FRIEND', label: 'Friends', color: '#009E73' },
+                    { id: 'SITS_WITH', label: 'Sits With', color: '#0072B2' },
+                    { id: 'SAME_CLUB', label: 'Same Club', color: '#CC79A7' },
+                    { id: 'PROJECT_TEAM', label: 'Project Team', color: '#E69F00' },
+                  ].map((ov) => {
+                    const isChecked = selectedOverlays.includes(ov.id);
+                    return (
+                      <button
+                        key={ov.id}
+                        type="button"
+                        onClick={() => onToggleOverlay(ov.id)}
+                        className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[10px] font-mono transition-all ${
+                          isChecked
+                            ? 'bg-white/[0.08] border-white/20 text-white'
+                            : 'bg-white/[0.01] border-transparent text-gray-400 opacity-60'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: ov.color }}
+                        />
+                        <span className="truncate">{ov.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-[11px] font-mono text-gray-400">
               <span className="font-semibold uppercase tracking-wider">Entity Filter</span>
               <div className="flex gap-2">
@@ -369,6 +501,48 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Subject Filter */}
+              {onSubjectFilterChange && (
+                <div className="pt-1">
+                  <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wide mb-1">
+                    Subject Code Filter
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="All Subjects (e.g. CS301)"
+                    value={subjectFilter}
+                    onChange={(e) => onSubjectFilterChange(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white font-mono placeholder:text-gray-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              )}
+
+              {/* Privacy & Dismissed Options */}
+              <div className="pt-2 border-t border-white/10 space-y-1.5 font-mono text-[10px]">
+                {onToggleAnonymizeNames && (
+                  <label className="flex items-center justify-between p-1.5 rounded-lg bg-white/[0.02] border border-white/5 cursor-pointer text-gray-300 hover:text-white">
+                    <span>Anonymize Student Names</span>
+                    <input
+                      type="checkbox"
+                      checked={anonymizeNames}
+                      onChange={onToggleAnonymizeNames}
+                      className="rounded accent-cyan-500"
+                    />
+                  </label>
+                )}
+                {onToggleIncludeDismissed && (
+                  <label className="flex items-center justify-between p-1.5 rounded-lg bg-white/[0.02] border border-white/5 cursor-pointer text-gray-300 hover:text-white">
+                    <span>Show Dismissed Edges</span>
+                    <input
+                      type="checkbox"
+                      checked={includeDismissed}
+                      onChange={onToggleIncludeDismissed}
+                      className="rounded accent-cyan-500"
+                    />
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="pt-2 border-t border-white/10 flex justify-between items-center text-[10px] font-mono text-gray-400">
@@ -384,7 +558,82 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
           </div>
         )}
 
-        {/* ── 2. PATHFINDER TAB ── */}
+        {/* ── 2. RINGS / GROUPS TAB ── */}
+        {activeTab === 'rings' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-[11px] font-mono text-gray-400">
+              <span className="font-semibold uppercase tracking-wider">Validated Bunk Rings</span>
+              <span className="text-cyan-400 font-bold">{groups.length} Groups</span>
+            </div>
+
+            {groups.length === 0 ? (
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 text-center text-gray-400 font-mono text-xs">
+                No multi-person bunk rings detected at current sensitivity threshold.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {groups.map((grp) => (
+                  <div
+                    key={grp.group_id}
+                    className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10 hover:border-cyan-500/40 transition-all space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: GROUP_PALETTE[grp.group_id % GROUP_PALETTE.length] }}
+                        />
+                        <span className="font-bold text-white font-mono text-xs">
+                          Group #{grp.group_id}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-cyan-300">
+                        {grp.members.length} members · {grp.n_edges} ties
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {grp.members.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => onFocusNode?.(m)}
+                          className="px-2 py-0.5 rounded bg-white/[0.04] hover:bg-cyan-500/20 text-gray-300 hover:text-cyan-300 border border-white/10 text-[10px] font-mono transition-colors"
+                          title={`Focus on ${m}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {studentsWithoutTies.length > 0 && (
+              <div className="pt-2 border-t border-white/10 space-y-1.5">
+                <div className="flex justify-between items-center text-[10px] font-mono text-gray-400">
+                  <span className="font-semibold uppercase">Solo Bunkers (Without Ties)</span>
+                  <span className="text-gray-300 font-bold">{studentsWithoutTies.length}</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 font-mono text-[10px]">
+                  {studentsWithoutTies.map((st) => (
+                    <div
+                      key={st.roll_no}
+                      onClick={() => onFocusNode?.(st.roll_no)}
+                      className="p-1.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 flex items-center justify-between cursor-pointer text-gray-300"
+                    >
+                      <span className="truncate">{st.name || st.roll_no}</span>
+                      <span className="text-amber-400/90 font-bold">{st.bunk_cells} skips</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 3. PATHFINDER TAB ── */}
         {activeTab === 'pathfinder' && (
           <div className="space-y-3">
             <div className="text-[11px] font-mono text-gray-400 font-semibold uppercase tracking-wider">

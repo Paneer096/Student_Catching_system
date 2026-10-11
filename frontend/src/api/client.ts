@@ -452,36 +452,8 @@ class ApiClient {
     return this.request<DashboardSummary>(`/dashboard/summary?section=${encodeURIComponent(section)}`);
   }
 
-  async getGraphHierarchy(section = 'CS-3B'): Promise<HierarchicalGraphData> {
-    return this.request<HierarchicalGraphData>(`/graph/hierarchy?section=${encodeURIComponent(section)}`);
-  }
-
-  async getGraphClusters(section = 'CS-3B'): Promise<{ section: any; clusters: ClusterNode[]; summary: any }> {
-    return this.request(`/graph/clusters/${encodeURIComponent(section)}`);
-  }
-
-  async getStudentNeighbors(rollNo: string, depth = 2, edgeTypes?: string[]): Promise<StudentNeighborsSubgraph> {
-    const params = new URLSearchParams({ depth: String(depth) });
-    if (edgeTypes && edgeTypes.length > 0) {
-      params.append('edge_types', edgeTypes.join(','));
-    }
-    return this.request<StudentNeighborsSubgraph>(`/graph/student/${encodeURIComponent(rollNo)}/neighbors?${params.toString()}`);
-  }
-
-  async getAggregateEdges(section = 'CS-3B'): Promise<{ section: any; aggregate_edges: HierarchicalEdge[] }> {
-    return this.request(`/graph/aggregate-edges?section=${encodeURIComponent(section)}`);
-  }
-
-  async getGraphNodes(section = 'CS-3B'): Promise<{
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-    summary: { student_count: number; cohorts_count: number; edge_count: number; section_code: string };
-  }> {
-    return this.request(`/graph/nodes?section=${encodeURIComponent(section)}`);
-  }
-
   async getStudentProfile(rollNo: string): Promise<StudentDossier> {
-    return this.request<StudentDossier>(`/graph/student/${encodeURIComponent(rollNo)}`);
+    return this.request<StudentDossier>(`/students/${encodeURIComponent(rollNo)}/profile`);
   }
 
   async getMassBunks(section = 'CS-3B'): Promise<MassBunkEvent[]> {
@@ -617,168 +589,142 @@ class ApiClient {
     });
   }
 
-  async getBunkNetwork(params?: {
-    section?: string;
-    overlays?: string[];
-    subject?: string;
-    period?: number;
-    weekday?: number;
-  }): Promise<CytoscapeBunkNetworkData> {
+  // ── Connection Engine v3 API (§7.3) ─────────────────────────────────────────
+  async getBunkGraph(
+    sectionCode = 'CS-3B',
+    options: {
+      sensitivity?: 'strict' | 'balanced' | 'exploratory';
+      subject?: string;
+      period?: number;
+      weekday?: number;
+      from?: string;
+      to?: string;
+      overlays?: string[];
+      include_dismissed?: boolean;
+    } = {}
+  ): Promise<BunkGraphPayload> {
     const q = new URLSearchParams();
-    if (params?.section) q.append('section', params.section);
-    if (params?.overlays && params.overlays.length > 0) q.append('overlays', params.overlays.join(','));
-    if (params?.subject) q.append('subject', params.subject);
-    if (params?.period !== undefined) q.append('period', String(params.period));
-    if (params?.weekday !== undefined) q.append('weekday', String(params.weekday));
-    return this.request<CytoscapeBunkNetworkData>(`/graph/bunk-network?${q.toString()}`);
+    if (options.sensitivity) q.append('sensitivity', options.sensitivity);
+    if (options.subject) q.append('subject', options.subject);
+    if (options.period !== undefined) q.append('period', String(options.period));
+    if (options.weekday !== undefined) q.append('weekday', String(options.weekday));
+    if (options.from) q.append('from', options.from);
+    if (options.to) q.append('to', options.to);
+    if (options.overlays && options.overlays.length > 0) q.append('overlays', options.overlays.join(','));
+    if (options.include_dismissed) q.append('include_dismissed', 'true');
+    return this.request<BunkGraphPayload>(`/sections/${encodeURIComponent(sectionCode)}/bunk-graph?${q.toString()}`);
   }
 
-  async getPairEvidence(rollA: string, rollB: string, section = 'CS-3B'): Promise<PairEvidenceData> {
-    return this.request<PairEvidenceData>(`/graph/evidence/${encodeURIComponent(rollA)}/${encodeURIComponent(rollB)}?section=${encodeURIComponent(section)}`);
-  }
-
-  // ── Knowledge Graph API (Prompt 3 Specifications) ──────────────────────
-  async getKnowledgeGraphData(section = 'CS-3B', minWeight = 3, validatedOnly = false): Promise<KnowledgeGraphData> {
-    const params = new URLSearchParams({
-      section,
-      min_weight: String(minWeight),
-      validated_only: String(validatedOnly),
-    });
-    return this.request<KnowledgeGraphData>(`/graph/data?${params.toString()}`);
-  }
-
-  async getKnowledgeGraphShortestPath(source: string, target: string, section = 'CS-3B'): Promise<ShortestPathResult> {
-    return this.request<ShortestPathResult>(
-      `/graph/shortest-path?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&section=${encodeURIComponent(section)}`
+  async getPairEvidence(rollA: string, rollB: string, sectionCode = 'CS-3B'): Promise<PairEvidenceData> {
+    return this.request<PairEvidenceData>(
+      `/sections/${encodeURIComponent(sectionCode)}/pairs/${encodeURIComponent(rollA)}/${encodeURIComponent(rollB)}/evidence`
     );
   }
 
-  async getKnowledgeGraphSubgraph(nodeId: string, depth = 1, section = 'CS-3B'): Promise<{ root_node_id: string; depth: number; nodes: any[]; edges: any[] }> {
+  async dismissEdge(
+    sectionCode: string,
+    rollA: string,
+    rollB: string,
+    reason: string
+  ): Promise<{ status: string; message: string }> {
     return this.request(
-      `/graph/subgraph?node_id=${encodeURIComponent(nodeId)}&depth=${depth}&section=${encodeURIComponent(section)}`
+      `/sections/${encodeURIComponent(sectionCode)}/pairs/${encodeURIComponent(rollA)}/${encodeURIComponent(rollB)}/dismiss`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }
     );
   }
-
-  async createKnowledgeGraphNode(node: { id: string; label: string; type: string; community?: number; properties?: Record<string, any> }) {
-    return this.request('/graph/nodes', {
-      method: 'POST',
-      body: JSON.stringify(node),
-    });
-  }
-
-  async createKnowledgeGraphEdge(edge: { source: string; target: string; type: string; weight?: number; timestamp?: string; properties?: Record<string, any> }) {
-    return this.request('/graph/edges', {
-      method: 'POST',
-      body: JSON.stringify(edge),
-    });
-  }
-
-  async getKnowledgeGraphTimeline(start?: string, end?: string, section = 'CS-3B'): Promise<{ start?: string; end?: string; nodes: any[]; edges: any[] }> {
-    const q = new URLSearchParams();
-    if (start) q.append('start', start);
-    if (end) q.append('end', end);
-    q.append('section', section);
-    return this.request(`/graph/timeline?${q.toString()}`);
-  }
 }
 
-export interface KnowledgeGraphNode {
+export interface BunkGraphNode {
+  roll_no: string;
+  name: string;
+  bunk_rate: number;
+  bunk_cells: number;
+  eligible_cells: number;
+  n_ties: number;
+  group_id: number | null;
+}
+
+export interface SharedTieItem {
+  tie_type: string;
+  kind: string;
+  source_type: string;
+  detail: string;
+}
+
+export interface BunkGraphEdge {
   id: string;
-  label: string;
   type: string;
-  community?: number;
-  pagerank?: number;
-  degree?: number;
-  properties?: Record<string, any>;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
+  student_a: string;
+  student_b: string;
+  weight: number;
+  co_cells: number;
+  co_dates: number;
+  expected: number;
+  lift: number;
+  q_value: number;
+  source_type: string;
+  derived_from: string;
+  shared_ties: SharedTieItem[];
+  has_social_tie: boolean;
+  has_context_tie: boolean;
+  dismissed: boolean;
 }
 
-export interface KnowledgeGraphEdge {
-  source: string;
-  target: string;
-  type: string;
-  weight?: number;
-  timestamp?: string;
-  properties?: Record<string, any>;
+export interface BunkGroupInfo {
+  group_id: number;
+  members: string[];
+  n_edges: number;
+  mean_weight: number;
 }
 
-export interface KnowledgeGraphData {
-  nodes: KnowledgeGraphNode[];
-  edges: KnowledgeGraphEdge[];
-  summary?: {
-    node_count: number;
-    edge_count: number;
-    section: string;
-    status: string;
-  };
+export interface StudentWithoutTie {
+  roll_no: string;
+  name: string;
+  bunk_cells: number;
 }
 
-export interface ShortestPathResult {
-  source: string;
-  target: string;
-  found: boolean;
-  nodes: string[];
-  edges: Array<{
-    source: string;
-    target: string;
-    type: string;
-    weight: number;
-  }>;
-  length: number;
-  message?: string;
+export interface MassSkipEvent {
+  date: string;
+  block: number;
+  skipped: number;
+  present: number;
 }
 
-
-export interface CytoscapeBunkNetworkData {
-  section_code: string;
-  elements: Array<{
-    group: 'nodes' | 'edges';
-    data: any;
-    classes?: string;
-  }>;
-  compound_groups: Array<{
-    id: string;
-    label: string;
-    size: number;
-    members: string[];
-    is_compound: boolean;
-  }>;
-  isolated_students: Array<{
-    id: string;
-    name: string;
-    roll_no: string;
-    bunk_rate_30d: number;
-    attendance_rate: number;
-  }>;
-  summary: {
-    total_students: number;
-    connected_students: number;
-    isolated_count: number;
-    edge_count: number;
-    sessions_evaluated: number;
-    is_degraded: boolean;
-    groups_count: number;
-    rendered_nodes: number;
-  };
+export interface BunkGraphPayload {
+  status: string;
+  message: string;
+  engine_version: string;
+  params_hash: string;
+  quality: Record<string, any>;
+  nodes: BunkGraphNode[];
+  edges: BunkGraphEdge[];
+  groups: BunkGroupInfo[];
+  pairs_only: Array<[string, string]>;
+  students_without_ties: StudentWithoutTie[];
+  mass_skip_events: MassSkipEvent[];
 }
 
 export interface PairEvidenceData {
+  status: string;
   student_a: string;
   student_b: string;
   plain_language: string;
-  lift: number;
+  co_cells: number;
+  co_dates: number;
   expected: number;
-  co_bunk_count: number;
-  p_value: number;
+  lift: number;
   q_value: number;
-  jaccard: number;
-  sessions: Array<{
+  shared_ties: SharedTieItem[];
+  overlapping_sessions: Array<{
     date: string;
-    period: number;
-    subject_code: string;
+    block: number;
+    weekday: string;
+    periods_a: number[];
+    periods_b: number[];
+    subjects: string[];
   }>;
 }
 

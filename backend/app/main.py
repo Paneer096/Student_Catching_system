@@ -23,13 +23,13 @@ from app.api.routers import (
     health,
     admin,
     dashboard,
-    graph,
     ingest,
     detection,
     calendar,
     interventions,
     students,
     audit,
+    connection,
 )
 
 
@@ -108,13 +108,14 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
-app.include_router(graph.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
 app.include_router(detection.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(interventions.router, prefix="/api/v1")
 app.include_router(students.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
+app.include_router(connection.router, prefix="/api")
+app.include_router(connection.router, prefix="/api/v1")
 
 
 # ── Root ─────────────────────────────────────────────────────────────────────

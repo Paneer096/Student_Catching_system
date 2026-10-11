@@ -194,26 +194,46 @@ export const FloatingNodeHud: React.FC<FloatingNodeHudProps> = ({
         <div className="p-4 overflow-y-auto space-y-4 text-xs font-sans">
           {/* Metrics Grid */}
           <div className="grid grid-cols-3 gap-2 font-mono">
+            {node.bunk_rate !== undefined || node.properties?.bunk_rate !== undefined ? (
+              <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 flex flex-col">
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider">Bunk Rate</span>
+                <span className="text-base font-extrabold text-amber-400 mt-0.5">
+                  {((node.bunk_rate ?? node.properties?.bunk_rate ?? 0) * 100).toFixed(1)}%
+                </span>
+                <span className="text-[9px] text-gray-500">Absent Classes</span>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 flex flex-col">
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider">Degree</span>
+                <span className="text-base font-extrabold text-white mt-0.5">
+                  {node.degree ?? neighborInfo.length}
+                </span>
+                <span className="text-[9px] text-gray-500">Connections</span>
+              </div>
+            )}
+
             <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 flex flex-col">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Degree</span>
-              <span className="text-base font-extrabold text-white mt-0.5">
-                {node.degree ?? neighborInfo.length}
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                {node.group_id !== undefined ? 'Bunk Group' : 'Community'}
               </span>
-              <span className="text-[9px] text-gray-500">Connections</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 flex flex-col">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Community</span>
               <span className="text-base font-extrabold text-emerald-400 mt-0.5">
-                #{node.community ?? 1}
+                {node.group_id !== undefined && node.group_id !== null
+                  ? `Group #${node.group_id}`
+                  : node.community
+                  ? `#${node.community}`
+                  : 'Solo'}
               </span>
-              <span className="text-[9px] text-gray-500">Louvain Cluster</span>
+              <span className="text-[9px] text-gray-500">
+                {node.group_id !== undefined && node.group_id !== null ? 'Validated Ring' : 'Independent'}
+              </span>
             </div>
+
             <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5 flex flex-col">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider">PageRank</span>
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Ties</span>
               <span className="text-base font-extrabold text-cyan-400 mt-0.5">
-                {(node.pagerank || 0).toFixed(3)}
+                {node.n_ties ?? neighborInfo.length}
               </span>
-              <span className="text-[9px] text-gray-500">Centrality</span>
+              <span className="text-[9px] text-gray-500">Bunk Partners</span>
             </div>
           </div>
 

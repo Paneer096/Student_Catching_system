@@ -73,8 +73,12 @@ async def parse_and_ingest_attendance_csv(
             subject_code = row["subject_code"].strip().upper()
             status = row["status"].strip().upper()
 
-            if status not in ("PRESENT", "ABSENT", "LATE", "MEDICAL_LEAVE", "ON_DUTY"):
-                status = "ABSENT" if "ABS" in status else "PRESENT"
+            from makarov_engine.statuses import DEFAULT_ALIASES
+            if status not in DEFAULT_ALIASES:
+                errors.append(f"Row {row_idx}: Unrecognised attendance status '{status}'.")
+                batch.rows_rejected += 1
+                continue
+            status = DEFAULT_ALIASES[status]
 
             student_id = student_lookup.get(roll_no)
             if not student_id:

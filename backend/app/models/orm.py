@@ -128,8 +128,10 @@ class Student(Base):
     section_id: Mapped[str] = mapped_column(String(36), ForeignKey("sections.id"), nullable=False, index=True)
     branch: Mapped[str] = mapped_column(String(50), nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
-    dob: Mapped[date] = mapped_column(Date, nullable=False)  # PII — encrypt at app level
-    gender: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    dob: Mapped[date | None] = mapped_column(Date, nullable=True)  # PII — optional per §7.1
+    gender: Mapped[str | None] = mapped_column(String(10), nullable=True)  # Optional per §7.1
+    section_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    batch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -229,7 +231,8 @@ class Attendance(Base):
     __tablename__ = "attendance"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    student_id: Mapped[str] = mapped_column(String(36), ForeignKey("students.id"), nullable=False, index=True)
+    roll_no: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    student_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("students.id"), nullable=True, index=True)
     session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("academic_sessions.id"), nullable=True
     )  # nullable for backward compat during migration
@@ -237,6 +240,7 @@ class Attendance(Base):
     period: Mapped[int] = mapped_column(Integer, nullable=False)
     subject_code: Mapped[str] = mapped_column(String(20), ForeignKey("subjects.code"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)  # AttendanceStatus
+    batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     ingestion_run_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("ingestion_runs.id"), nullable=True
     )
@@ -533,6 +537,9 @@ class AuditLog(Base):
     detail_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 of previous entry
     hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)  # SHA-256 of this entry
+    who: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    object: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now(), nullable=True)
 
 
 # ─── Ingestion (§9) ──────────────────────────────────────────────────────────
@@ -598,3 +605,134 @@ class JobRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+# ─── Connection Engine v3 Models (§7.1) ──────────────────────────────────────
+
+class IngestionBatch(Base):
+    __tablename__ = "ingestion_batches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    batch_id: Mapped[str | None] = mapped_column(String(36), unique=True, index=True, default=generate_uuid)
+    dataset: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    file_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    rows_total: Mapped[int] = mapped_column(Integer, default=0)
+    rows_ok: Mapped[int] = mapped_column(Integer, default=0)
+    rows_rejected: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="ACCEPTED")  # ACCEPTED / PARTIAL / REJECTED
+    uploaded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
+    report_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class AttendanceHistory(Base):
+    __tablename__ = "attendance_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    roll_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    period: Mapped[int] = mapped_column(Integer, nullable=False)
+    old_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    new_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class SessionEvent(Base):
+    __tablename__ = "session_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    period: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class Leave(Base):
+    __tablename__ = "leaves"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    roll_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    from_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    to_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    leave_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class MembershipTie(Base):
+    __tablename__ = "membership_ties"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    roll_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    tie_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class PeerNomination(Base):
+    __tablename__ = "peer_nominations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    respondent: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    nominee: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    tie_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    mutual: Mapped[bool] = mapped_column(Boolean, default=False)
+    survey_date: Mapped[date] = mapped_column(Date, nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class EngineRun(Base):
+    __tablename__ = "engine_runs"
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    section_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    params_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    filters_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    data_version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    quality_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class DerivedEdge(Base):
+    __tablename__ = "derived_edges"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("engine_runs.run_id"), nullable=False, index=True)
+    student_a: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_b: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    c_cells: Mapped[int] = mapped_column(Integer, nullable=False)
+    co_dates: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected: Mapped[float] = mapped_column(Float, nullable=False)
+    lift: Mapped[float] = mapped_column(Float, nullable=False)
+    p_value: Mapped[float] = mapped_column(Float, nullable=False)
+    q_value: Mapped[float] = mapped_column(Float, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    derived_from: Mapped[str] = mapped_column(String(50), nullable=False)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class EdgeDismissal(Base):
+    __tablename__ = "edge_dismissals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    section_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_a: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_b: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    dismissed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("section_code", "student_a", "student_b", name="uq_edge_dismissal"),
+    )
+

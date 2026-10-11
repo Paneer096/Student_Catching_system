@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.orm import Student, Attendance, Section, Intervention
-from app.graph.graph_engine import build_coabsence_graph
+from app.connection.engine_service import compute_graph
 from app.detection.mass_bunk_detector import detect_mass_bunks
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -90,9 +90,15 @@ async def get_dashboard_summary(
     present_count = sum(1 for r in records if r.status in ("PRESENT", "LATE"))
     attendance_rate = round((present_count / total_records * 100), 1)
 
-    # 4. Graph analysis for Louvain cohorts & anchors
-    graph_res = await build_coabsence_graph(db, section)
-    cohorts_count = graph_res["summary"]["cohorts_count"]
+    # 4. Validated bunk groups from connection engine
+    try:
+        _, graph_payload = await compute_graph(db=db, section_code=section)
+        bunk_groups = graph_payload.get("groups", [])
+    except Exception:
+        graph_payload = {}
+        bunk_groups = []
+
+    cohorts_count = len(bunk_groups)
 
     # 6. Mass bunk detection
     mass_bunks = await detect_mass_bunks(db, section)
@@ -134,34 +140,29 @@ async def get_dashboard_summary(
     interv_res = await db.execute(stmt_interv)
     active_interventions = interv_res.scalar() or 0
 
-    # Group cohort members from graph nodes
-    cohort_members = {}
-    for node in graph_res["nodes"]:
-        c = node.get("cohort", "General")
-        if c not in cohort_members:
-            cohort_members[c] = []
-        cohort_members[c].append(node["name"])
-
-    # 8. Flagged cohorts table extracted from real graph
+    # 8. Flagged bunk groups table extracted from real connection engine
     flagged_cohorts = []
-    for node in graph_res["nodes"]:
-        if node["type"] == "anchor" and node["absences"] > 0:
-            c_name = str(node.get("cohort", "Cohort-1"))
-            members_list = cohort_members.get(node.get("cohort"), [node["name"]])
-            flagged_cohorts.append({
-                "id": f"cohort-{c_name}",
-                "name": f"Cohort #{c_name}" if not c_name.startswith("Cohort") else c_name,
-                "cohort_id": c_name,
-                "top_peer": f"{node['name']} ({node['roll_no']})",
-                "anchor_roll": node["roll_no"],
-                "anchor_name": node["name"],
-                "size": len(members_list),
-                "members": members_list,
-                "pattern": f"Absent in {node['absences']} sessions",
-                "risk_score": node["score"],
-                "risk": "HIGH" if node["score"] >= 65 else "MEDIUM",
-                "risk_level": "High" if node["score"] >= 65 else "Medium",
-            })
+    for g in bunk_groups:
+        gid = g.get("group_id", 1)
+        members = g.get("members", [])
+        mean_wt = g.get("mean_weight", 0.0)
+        n_edges = g.get("n_edges", 0)
+        risk_score = round(mean_wt * 100, 1)
+        top_student = members[0] if members else ""
+        flagged_cohorts.append({
+            "id": f"bunk-group-{gid}",
+            "name": f"Bunk Group {gid}",
+            "cohort_id": f"Group-{gid}",
+            "top_peer": top_student,
+            "anchor_roll": top_student,
+            "anchor_name": top_student,
+            "size": len(members),
+            "members": members,
+            "pattern": f"{n_edges} ties, mean overlap {round(mean_wt, 2)}",
+            "risk_score": risk_score,
+            "risk": "HIGH" if risk_score >= 40 else "MEDIUM",
+            "risk_level": "High" if risk_score >= 40 else "Medium",
+        })
 
     # 9. Recent alerts from real mass bunk detections
     recent_alerts = []

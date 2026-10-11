@@ -42,6 +42,8 @@ export interface KnowledgeGraphCanvasProps {
   layoutMode: 'force' | 'hierarchical' | 'radial';
   isPhysicsPaused: boolean;
   isParticlesEnabled: boolean;
+  onSelectEdge?: (edge: any) => void;
+  anonymizeNames?: boolean;
 }
 
 export interface KnowledgeGraphCanvasRef {
@@ -65,7 +67,9 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
   highlightedPath = null,
   layoutMode,
   isPhysicsPaused,
-  isParticlesEnabled,
+  isParticlesEnabled: _isParticlesEnabled,
+  onSelectEdge,
+  anonymizeNames = false,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
@@ -313,18 +317,28 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     const isPathNode = pathNodeIds ? pathNodeIds.has(node.id) : true;
     const isDimmed = pathNodeIds !== null && !isPathNode;
 
-    // Base radius dynamically scaled by degree or centrality
-    const degree = node.degree ?? (node.__degree || 2);
-    const baseRadius = Math.max(6, Math.min(20, 7 + Math.sqrt(degree) * 2.2));
-    const radius = isSelected ? baseRadius * 1.3 : isHovered ? baseRadius * 1.2 : baseRadius;
+    // Node size = bunk_rate (only thing size means per spec §6)
+    const bunkRate = typeof node.bunk_rate === 'number' ? node.bunk_rate : (node.properties?.bunk_rate ?? 0.08);
+    const baseRadius = Math.max(8, Math.min(26, 8 + bunkRate * 45));
+    const radius = isSelected ? baseRadius * 1.25 : isHovered ? baseRadius * 1.15 : baseRadius;
 
-    const nodeColor = node.color || '#00b4ff';
+    const nodeColor = node.color || '#6366f1';
 
     ctx.save();
 
-    // Dimmed effect when pathfinding is active and node is unrelated
+    // Dimmed effect when focus mode is active and node is not related
     if (isDimmed) {
-      ctx.globalAlpha = 0.2;
+      ctx.globalAlpha = 0.15;
+    } else if (selectedNode && selectedNode.id !== node.id) {
+      // Check if neighbor
+      const isNeighbor = edges.some((e) => {
+        const u = typeof e.source === 'object' ? e.source.id : e.source;
+        const v = typeof e.target === 'object' ? e.target.id : e.target;
+        return (u === selectedNode.id && v === node.id) || (v === selectedNode.id && u === node.id);
+      });
+      if (!isNeighbor) {
+        ctx.globalAlpha = 0.15;
+      }
     }
 
     // Glowing halo ring around selected, hovered, or search-matched nodes
@@ -361,14 +375,14 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
 
     // Center Inner Glyph or Letter
     ctx.font = `bold ${Math.max(7, Math.floor(radius * 0.85))}px Inter, sans-serif`;
-    ctx.fillStyle = nodeColor;
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const glyph = (node.type || 'N').charAt(0).toUpperCase();
+    const glyph = (node.roll_no || node.label || 'S').slice(-2);
     ctx.fillText(glyph, node.x, node.y + 0.5);
 
-    // Crown / Hub Badge for top PageRank entities
-    const isHub = (node.pagerank || 0) >= 0.072 || node.type === 'Classroom' || node.type === 'Faculty';
+    // Crown / Hub Badge for top bunk entities or groups
+    const isHub = (node.n_ties || 0) >= 3 || node.group_id;
     if (isHub && !isDimmed) {
       ctx.beginPath();
       const badgeY = node.y - radius - 5;
@@ -380,20 +394,20 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
       ctx.shadowBlur = 0;
     }
 
-    // High-DPI Crisp Label beneath the node, dynamically scaled
-    // Ensure labels remain legible when zoomed in or out
-    const fontSize = Math.max(9, Math.min(14, 11 / Math.sqrt(globalScale)));
-    ctx.font = `600 ${fontSize}px Inter, monospace`;
+    // High-DPI Crisp Label beneath the node
+    const fontSize = Math.max(9, Math.min(13, 11 / Math.sqrt(globalScale)));
+    ctx.font = `600 ${fontSize}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    const labelText = node.label || node.id;
+    const labelText = anonymizeNames
+      ? (node.properties?.roll_no || node.roll_no || node.id)
+      : (node.label || node.name || node.properties?.name || node.id);
     const textY = node.y + radius + 4;
 
-    // Dark background pill behind text for high legibility
     const textWidth = ctx.measureText(labelText).width;
     const pillPad = 3;
-    ctx.fillStyle = 'rgba(7, 8, 12, 0.85)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
     ctx.fillRect(
       node.x - textWidth / 2 - pillPad,
       textY - 1,
@@ -401,23 +415,23 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
       fontSize + 3
     );
 
-    ctx.fillStyle = isSelected ? '#ffffff' : isHovered ? '#00b4ff' : '#d1d5db';
+    ctx.fillStyle = isSelected ? '#ffffff' : isHovered ? '#38bdf8' : '#e2e8f0';
     ctx.fillText(labelText, node.x, textY);
 
     ctx.restore();
-  }, [selectedNode, hoveredNode, searchMatchedNodeIds, pathNodeIds]);
+  }, [selectedNode, hoveredNode, searchMatchedNodeIds, pathNodeIds, edges, anonymizeNames]);
 
   // Pointer area paint: sets accurate hitboxes matching the custom node radius
   const paintPointerArea = useCallback((node: any, paintColor: string, ctx: CanvasRenderingContext2D) => {
-    const degree = node.degree ?? 2;
-    const baseRadius = Math.max(6, Math.min(20, 7 + Math.sqrt(degree) * 2.2));
+    const bunkRate = typeof node.bunk_rate === 'number' ? node.bunk_rate : 0.08;
+    const baseRadius = Math.max(8, Math.min(26, 8 + bunkRate * 45));
     ctx.fillStyle = paintColor;
     ctx.beginPath();
     ctx.arc(node.x, node.y, baseRadius + 4, 0, 2 * Math.PI);
     ctx.fill();
   }, []);
 
-  // Custom Link Canvas Renderer
+  // Custom Link Canvas Renderer (§6 spec colors and thickness)
   const renderCustomLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const src = link.source;
     const tgt = link.target;
@@ -430,87 +444,75 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     const isSelectedEdge = selectedNode ? (srcId === selectedNode.id || tgtId === selectedNode.id) : false;
     const isHoveredEdge = hoveredNode ? (srcId === hoveredNode.id || tgtId === hoveredNode.id) : false;
     const isDirectlyFocused = isPathEdge || isSelectedEdge || isHoveredEdge;
-    const isDimmed = (pathEdgePairs !== null && !isPathEdge) || ((selectedNode || hoveredNode) && !isDirectlyFocused);
+    const isDimmed = selectedNode && !isSelectedEdge;
 
-    const isBunkTie = link.type?.includes('BUNKS_WITH') || link.type?.includes('CO_ABSENT') || link.type?.includes('coabsence');
+    // Spec color contract (§6):
+    // BUNKS_WITH: #D55E00 (vermilion), NAMED_FRIEND: #009E73, SITS_WITH: #0072B2, SAME_CLUB: #CC79A7, PROJECT_TEAM: #E69F00
+    let strokeColor = '#D55E00';
+    const edgeType = link.type || (link.rawEdges?.[0]?.type ?? 'BUNKS_WITH');
+    if (edgeType.includes('NAMED_FRIEND')) strokeColor = '#009E73';
+    else if (edgeType.includes('SITS_WITH')) strokeColor = '#0072B2';
+    else if (edgeType.includes('SAME_CLUB')) strokeColor = '#CC79A7';
+    else if (edgeType.includes('PROJECT_TEAM')) strokeColor = '#E69F00';
+    else if (edgeType.includes('BUNKS_WITH')) strokeColor = '#D55E00';
+
+    const weight = link.weight ?? (link.rawEdges?.[0]?.weight ?? 0.5);
+    const thickness = Math.max(1.5, Math.min(6, weight * 5.5)) / globalScale;
 
     ctx.save();
 
     if (isDimmed) {
-      ctx.globalAlpha = 0.04;
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 0.75 / globalScale;
-    } else if (isPathEdge) {
-      ctx.globalAlpha = 1.0;
-      ctx.strokeStyle = '#00b4ff';
-      ctx.lineWidth = 3.5 / globalScale;
-      ctx.shadowColor = '#00b4ff';
-      ctx.shadowBlur = 16;
-    } else if (isSelectedEdge || isHoveredEdge) {
-      ctx.globalAlpha = 1.0;
-      ctx.strokeStyle = isBunkTie ? '#f43f5e' : '#38bdf8';
-      ctx.lineWidth = 3.0 / globalScale;
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 14;
-    } else if (isBunkTie) {
-      // Subtle neat co-absence tie when not actively focused
-      ctx.globalAlpha = 0.30;
-      ctx.strokeStyle = '#f43f5e';
-      ctx.lineWidth = Math.max(0.8, Math.min(2.2, (link.weight || 1) * 0.7)) / globalScale;
+      ctx.globalAlpha = 0.15;
     } else {
-      // General relational edge
-      ctx.globalAlpha = 0.38;
-      ctx.strokeStyle = '#475569';
-      ctx.lineWidth = Math.max(1.0, Math.min(2.5, (link.weight || 1) * 0.8)) / globalScale;
+      ctx.globalAlpha = isDirectlyFocused ? 1.0 : 0.85;
     }
 
-    // Draw edge line
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = isDirectlyFocused ? thickness * 1.4 : thickness;
+
+    // Dashed if one-way overlay tie
+    if (link.rawEdges?.[0]?.kind === 'one_way') {
+      ctx.setLineDash([5 / globalScale, 5 / globalScale]);
+    } else {
+      ctx.setLineDash([]);
+    }
+
     ctx.beginPath();
     ctx.moveTo(src.x, src.y);
     ctx.lineTo(tgt.x, tgt.y);
     ctx.stroke();
 
-    // Render link label ONLY when directly focused (hovered/selected node or path), preventing label clutter!
-    if (isDirectlyFocused && link.type) {
+    // Corroboration badge (§6): small badge on BUNKS_WITH edge when corroborated
+    const raw0 = link.rawEdges?.[0];
+    if (raw0 && (raw0.has_social_tie || raw0.has_context_tie) && !isDimmed) {
       const midX = (src.x + tgt.x) / 2;
       const midY = (src.y + tgt.y) / 2;
-      const angle = Math.atan2(tgt.y - src.y, tgt.x - src.x);
-
-      ctx.save();
-      ctx.translate(midX, midY);
-
-      // Rotate text along link angle (flip if upside down)
-      let textAngle = angle;
-      if (textAngle > Math.PI / 2 || textAngle < -Math.PI / 2) {
-        textAngle += Math.PI;
-      }
-      ctx.rotate(textAngle);
-
-      const labelFontSize = Math.max(8, Math.min(11, 9.5 / Math.sqrt(globalScale)));
-      ctx.font = `600 ${labelFontSize}px Inter, monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      const labelText = link.type;
-      const labelWidth = ctx.measureText(labelText).width;
-      const h = labelFontSize + 6;
-      const w = labelWidth + 8;
-
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.92)';
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-
-      ctx.strokeStyle = isBunkTie ? '#f43f5e' : '#00b4ff';
-      ctx.lineWidth = 1.2 / globalScale;
-      ctx.strokeRect(-w / 2, -h / 2, w, h);
-
-      ctx.fillStyle = isBunkTie ? '#fda4af' : '#e0f2fe';
-      ctx.fillText(labelText, 0, 0);
-
-      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(midX, midY, 4 / globalScale, 0, 2 * Math.PI);
+      ctx.fillStyle = raw0.has_social_tie ? '#009E73' : '#0072B2';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1 / globalScale;
+      ctx.stroke();
     }
 
     ctx.restore();
-  }, [pathEdgePairs, selectedNode, hoveredNode]);
+  }, [selectedNode, hoveredNode]);
+
+  // Link Pointer Area: wide clickable area for easy edge selection
+  const linkPointerAreaPaint = useCallback((link: any, paintColor: string, ctx: CanvasRenderingContext2D) => {
+    const src = link.source;
+    const tgt = link.target;
+    if (!src || !tgt || src.x === undefined || tgt.x === undefined) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(src.x, src.y);
+    ctx.lineTo(tgt.x, tgt.y);
+    ctx.strokeStyle = paintColor;
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.restore();
+  }, []);
 
   return (
     <div
@@ -533,33 +535,38 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
         nodeCanvasObject={renderCustomNode}
         nodePointerAreaPaint={paintPointerArea}
         linkCanvasObject={renderCustomLink}
-        linkDirectionalParticles={isParticlesEnabled ? (link: any) => {
+        linkPointerAreaPaint={linkPointerAreaPaint}
+        linkDirectionalParticles={(link: any) => {
           const sId = String(typeof link.source === 'object' ? link.source.id : link.source);
           const tId = String(typeof link.target === 'object' ? link.target.id : link.target);
           const isSel = selectedNode ? (sId === selectedNode.id || tId === selectedNode.id) : false;
           const isHov = hoveredNode ? (sId === hoveredNode.id || tId === hoveredNode.id) : false;
-          if (link.isPathEdge) return 4;
-          if (isSel || isHov) return 3;
-          if (selectedNode || hoveredNode) return 0;
-          return 1;
-        } : 0}
-        linkDirectionalParticleSpeed={(link: any) => (link.isPathEdge ? 0.012 : 0.007)}
-        linkDirectionalParticleWidth={(link: any) => (link.isPathEdge ? 3 : 2)}
+          if (isSel || isHov) return 4;
+          return 2;
+        }}
+        linkDirectionalParticleSpeed={() => 0.009}
+        linkDirectionalParticleWidth={() => 2.5}
         linkDirectionalParticleColor={(link: any) => {
-          if (link.isPathEdge) return '#00b4ff';
-          const isBunk = link.type?.includes('BUNKS_WITH') || link.type?.includes('CO_ABSENT');
-          return isBunk ? '#f43f5e' : '#38bdf8';
+          const isBunk = link.type?.includes('BUNKS_WITH');
+          return isBunk ? '#D55E00' : '#38bdf8';
         }}
         onNodeClick={(node: any) => {
           onSelectNode(node);
           if (fgRef.current && node.x !== undefined && node.y !== undefined) {
-            fgRef.current.centerAt(node.x, node.y, 500);
+            fgRef.current.centerAt(node.x, node.y, 400);
           }
         }}
+        onLinkClick={(link: any) => {
+          const raw = link?.rawEdges?.[0] || link;
+          onSelectEdge?.(raw);
+        }}
         onNodeHover={(node: any) => onHoverNode(node || null)}
-        onBackgroundClick={() => onSelectNode(null)}
-        cooldownTicks={120}
-        warmupTicks={30}
+        onBackgroundClick={() => {
+          onSelectNode(null);
+          onSelectEdge?.(null);
+        }}
+        cooldownTicks={100}
+        warmupTicks={25}
       />
     </div>
   );
