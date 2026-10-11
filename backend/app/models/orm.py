@@ -627,6 +627,7 @@ class IngestionBatch(Base):
     status: Mapped[str] = mapped_column(String(20), default="ACCEPTED")  # ACCEPTED / PARTIAL / REJECTED
     uploaded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
     report_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 

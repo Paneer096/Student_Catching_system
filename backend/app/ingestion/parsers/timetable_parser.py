@@ -9,11 +9,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.orm import TimetableSlot, Section, Subject, Teacher
+import hashlib
+from app.models.orm import TimetableSlot, Section, Subject, Teacher, IngestionBatch, User
 
 
-async def parse_and_ingest_timetable_csv(db: AsyncSession, csv_content: str) -> dict[str, Any]:
-    """Parse and insert timetable slots."""
+async def parse_and_ingest_timetable_csv(
+    db: AsyncSession,
+    csv_content: str,
+    filename: str = "timetable.csv",
+) -> dict[str, Any]:
+    """Parse and insert timetable slots, logging an IngestionBatch."""
     reader = csv.DictReader(io.StringIO(csv_content))
     if not reader.fieldnames:
         raise ValueError("Timetable CSV is empty.")
@@ -26,6 +31,25 @@ async def parse_and_ingest_timetable_csv(db: AsyncSession, csv_content: str) -> 
     # Sections lookup
     sec_res = await db.execute(select(Section))
     sections = {s.code: s.id for s in sec_res.scalars().all()}
+
+    file_hash = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
+    user_res = await db.execute(select(User).limit(1))
+    first_user = user_res.scalar_one_or_none()
+    user_id = first_user.id if first_user else "usr-admin"
+
+    batch = IngestionBatch(
+        file_hash=file_hash,
+        file_sha256=file_hash,
+        file_type="timetable",
+        file_name=filename,
+        dataset="timetable",
+        uploaded_by=user_id,
+        rows_ok=0,
+        rows_rejected=0,
+        status="ACCEPTED",
+    )
+    db.add(batch)
+    await db.flush()
 
     inserted = 0
     for row in reader:
@@ -66,5 +90,7 @@ async def parse_and_ingest_timetable_csv(db: AsyncSession, csv_content: str) -> 
             ))
         inserted += 1
 
+    batch.rows_ok = inserted
+    batch.rows_total = inserted
     await db.commit()
-    return {"status": "SUCCESS", "slots_ingested": inserted}
+    return {"status": "SUCCESS", "slots_ingested": inserted, "batch_id": batch.id}

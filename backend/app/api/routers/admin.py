@@ -82,23 +82,25 @@ async def load_sample_data(db: AsyncSession = Depends(get_db)):
     students_file = sample_dir / "students_cs3b.csv"
     if students_file.exists():
         content = students_file.read_text(encoding="utf-8")
-        results["students"] = await parse_and_ingest_students_csv(db, content)
+        results["students"] = await parse_and_ingest_students_csv(db, content, filename="students_cs3b.csv")
     else:
         results["students"] = "File students_cs3b.csv not found"
 
     # 2. Academic Calendar CSV
-    calendar_file = sample_dir / "academic_calendar_2024.csv"
+    calendar_file = sample_dir / "academic_calendar_2026.csv"
+    if not calendar_file.exists():
+        calendar_file = sample_dir / "academic_calendar_2024.csv"
     if calendar_file.exists():
         content = calendar_file.read_text(encoding="utf-8")
-        results["calendar"] = await parse_and_ingest_calendar_csv(db, content)
+        results["calendar"] = await parse_and_ingest_calendar_csv(db, content, filename=calendar_file.name)
     else:
-        results["calendar"] = "File academic_calendar_2024.csv not found"
+        results["calendar"] = "File academic_calendar_2026.csv not found"
 
     # 3. Timetable CSV
     timetable_file = sample_dir / "timetable_cs3b.csv"
     if timetable_file.exists():
         content = timetable_file.read_text(encoding="utf-8")
-        results["timetable"] = await parse_and_ingest_timetable_csv(db, content)
+        results["timetable"] = await parse_and_ingest_timetable_csv(db, content, filename="timetable_cs3b.csv")
     else:
         results["timetable"] = "File timetable_cs3b.csv not found"
 
@@ -107,7 +109,7 @@ async def load_sample_data(db: AsyncSession = Depends(get_db)):
     if attendance_file.exists():
         content = attendance_file.read_text(encoding="utf-8")
         results["attendance"] = await parse_and_ingest_attendance_csv(
-            db, content, filename="sample_attendance_cs3b_oct.csv", uploaded_by_username="admin"
+            db, content, filename="attendance_cs3b_oct.csv", uploaded_by_username="admin"
         )
     else:
         results["attendance"] = "File attendance_cs3b_oct.csv not found"

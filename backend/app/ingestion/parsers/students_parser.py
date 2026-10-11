@@ -13,8 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.orm import Student, Section
 
 
-async def parse_and_ingest_students_csv(db: AsyncSession, csv_content: str) -> dict[str, Any]:
-    """Parse and insert students."""
+import hashlib
+from app.models.orm import Student, Section, IngestionBatch, User
+
+
+async def parse_and_ingest_students_csv(
+    db: AsyncSession,
+    csv_content: str,
+    filename: str = "students.csv",
+) -> dict[str, Any]:
+    """Parse and insert students, logging an IngestionBatch."""
     reader = csv.DictReader(io.StringIO(csv_content))
     if not reader.fieldnames:
         raise ValueError("Students CSV is empty.")
@@ -27,6 +35,27 @@ async def parse_and_ingest_students_csv(db: AsyncSession, csv_content: str) -> d
     # Sections lookup
     sec_res = await db.execute(select(Section))
     sections = {s.code: s.id for s in sec_res.scalars().all()}
+
+    file_hash = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
+
+    # Admin user ID for upload tracking
+    user_res = await db.execute(select(User).limit(1))
+    first_user = user_res.scalar_one_or_none()
+    user_id = first_user.id if first_user else "usr-admin"
+
+    batch = IngestionBatch(
+        file_hash=file_hash,
+        file_sha256=file_hash,
+        file_type="students",
+        file_name=filename,
+        dataset="students",
+        uploaded_by=user_id,
+        rows_ok=0,
+        rows_rejected=0,
+        status="ACCEPTED",
+    )
+    db.add(batch)
+    await db.flush()
 
     inserted = 0
     for row in reader:
@@ -72,5 +101,7 @@ async def parse_and_ingest_students_csv(db: AsyncSession, csv_content: str) -> d
             ))
         inserted += 1
 
+    batch.rows_ok = inserted
+    batch.rows_total = inserted
     await db.commit()
-    return {"status": "SUCCESS", "students_ingested": inserted}
+    return {"status": "SUCCESS", "students_ingested": inserted, "batch_id": batch.id}
