@@ -132,6 +132,7 @@ class Student(Base):
     gender: Mapped[str | None] = mapped_column(String(10), nullable=True)  # Optional per §7.1
     section_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     batch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    support_program: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
