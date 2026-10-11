@@ -621,6 +621,28 @@ class ApiClient {
     return `${this.baseUrl}/admin/demo-data/file/${fileKey}`;
   }
 
+  async getDemoDataStatus(): Promise<{
+    enabled: boolean;
+    students_count: number;
+    attendance_count: number;
+    section: string;
+  }> {
+    return this.request('/admin/demo-data/status');
+  }
+
+  async toggleDemoData(enabled: boolean): Promise<{
+    status: string;
+    enabled: boolean;
+    message: string;
+    students_count: number;
+    attendance_count: number;
+  }> {
+    return this.request('/admin/demo-data/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
   // ── Connection Engine v3 API (§7.3) ─────────────────────────────────────────
   async getBunkGraph(
     sectionCode = 'CS-3B',

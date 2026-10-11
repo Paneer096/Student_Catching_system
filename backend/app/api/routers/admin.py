@@ -8,14 +8,30 @@ from __future__ import annotations
 
 import csv
 import io
+import shutil
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from app.db import get_db
 from app.models.enums import UserRole
 from app.models.schemas import AuditVerifyResponse
+from app.models.orm import (
+    Student,
+    Attendance,
+    TimetableSlot,
+    CalendarDay,
+    IngestionBatch,
+    MembershipTie,
+    PeerNomination,
+    Leave,
+    DerivedEdge,
+    EdgeDismissal,
+    EngineRun,
+)
 from app.security.rbac import AuthContext, require_roles
 from app.security.audit_log import verify_audit_chain
 from app.config.settings import get_settings, BASE_DIR
@@ -283,4 +299,107 @@ async def download_demo_file(file_key: str):
             )
 
     raise HTTPException(status_code=404, detail=f"Demo file '{filename}' not found.")
+
+
+class DemoDataToggleRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/demo-data/status")
+async def get_demo_data_status(db: AsyncSession = Depends(get_db)):
+    """Check if demo data is currently loaded or empty."""
+    st_res = await db.execute(select(func.count(Student.id)))
+    att_res = await db.execute(select(func.count(Attendance.id)))
+    st_count = st_res.scalar() or 0
+    att_count = att_res.scalar() or 0
+    is_active = (st_count > 0 or att_count > 0)
+    return {
+        "enabled": is_active,
+        "students_count": st_count,
+        "attendance_count": att_count,
+        "section": "CS-3B",
+    }
+
+
+@router.post("/demo-data/toggle")
+async def toggle_demo_data(
+    payload: DemoDataToggleRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Toggle demo data ON or OFF.
+    OFF: Wipes SQLite tables and clears engine cache (pristine empty classroom state).
+    ON: Re-seeds authentic presentation dataset (60 students, 5,280 attendance rows).
+    """
+    from app.connection.engine_service import _ENGINE_CACHE
+    from app.models.orm import (
+        Attendance,
+        Student,
+        TimetableSlot,
+        CalendarDay,
+        IngestionBatch,
+        MembershipTie,
+        PeerNomination,
+        Leave,
+        DerivedEdge,
+        EdgeDismissal,
+        EngineRun,
+    )
+
+    _ENGINE_CACHE.clear()
+
+    if not payload.enabled:
+        # Clear all demo data so the system is in a pristine empty state
+        await db.execute(delete(Attendance))
+        await db.execute(delete(Student))
+        await db.execute(delete(TimetableSlot))
+        await db.execute(delete(CalendarDay))
+        await db.execute(delete(IngestionBatch))
+        await db.execute(delete(MembershipTie))
+        await db.execute(delete(PeerNomination))
+        await db.execute(delete(Leave))
+        await db.execute(delete(DerivedEdge))
+        await db.execute(delete(EdgeDismissal))
+        await db.execute(delete(EngineRun))
+        await db.commit()
+
+        root_db = BASE_DIR.parent / "makerove.db"
+        backend_db = BASE_DIR / "makerove.db"
+        if backend_db.exists() and root_db.parent.exists():
+            try:
+                shutil.copyfile(backend_db, root_db)
+            except Exception:
+                pass
+
+        return {
+            "status": "SUCCESS",
+            "enabled": False,
+            "message": "Demo data disabled. System is in empty state (0 students, empty graph).",
+            "students_count": 0,
+            "attendance_count": 0,
+        }
+    else:
+        # Re-seed the authentic presentation dataset
+        await load_sample_data(db)
+
+        root_db = BASE_DIR.parent / "makerove.db"
+        backend_db = BASE_DIR / "makerove.db"
+        if backend_db.exists() and root_db.parent.exists():
+            try:
+                shutil.copyfile(backend_db, root_db)
+            except Exception:
+                pass
+
+        st_res = await db.execute(select(func.count(Student.id)))
+        att_res = await db.execute(select(func.count(Attendance.id)))
+        st_count = st_res.scalar() or 0
+        att_count = att_res.scalar() or 0
+
+        return {
+            "status": "SUCCESS",
+            "enabled": True,
+            "message": "Demo data enabled. Authentic Section CS-3B dataset is active.",
+            "students_count": st_count,
+            "attendance_count": att_count,
+        }
 

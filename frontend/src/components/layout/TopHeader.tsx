@@ -14,6 +14,9 @@ export interface TopHeaderProps {
   onExportReport: () => void;
   onOpenIngest: () => void;
   onOpenDemoData?: () => void;
+  isDemoDataActive?: boolean;
+  isTogglingDemoData?: boolean;
+  onToggleDemoData?: () => void;
   unreadCount?: number;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
@@ -28,6 +31,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onExportReport,
   onOpenIngest,
   onOpenDemoData,
+  isDemoDataActive = true,
+  isTogglingDemoData = false,
+  onToggleDemoData,
   unreadCount = 3,
   isDarkMode = false,
   onToggleTheme,
@@ -79,17 +85,67 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* ─── Right: Actions & User Persona Profile ──────────────────────────────── */}
       <div className="flex items-center gap-2">
-        {/* Demo Data Inspector button */}
-        {onOpenDemoData && (
+        {/* Interactive Demo Data ON / OFF Toggle Switch */}
+        <div className="flex items-center gap-1.5 bg-surface-container-low border border-outline-variant/80 px-2.5 py-1 rounded-lg shadow-2xs">
           <button
-            onClick={onOpenDemoData}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary-container/40 hover:bg-secondary-container border border-secondary/40 text-on-secondary-container rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
-            title="Inspect & download presentation demo data (CS-3B)"
+            onClick={onToggleDemoData}
+            disabled={isTogglingDemoData}
+            className={`flex items-center gap-2 cursor-pointer transition-all ${
+              isTogglingDemoData ? 'opacity-50 cursor-wait' : ''
+            }`}
+            title={
+              isDemoDataActive
+                ? 'Turn Demo Data OFF (Clear to 0 students / empty state)'
+                : 'Turn Demo Data ON (Load 60 students & CS-3B graph)'
+            }
           >
-            <span className="material-symbols-outlined text-[15px] text-secondary">database</span>
-            <span>Demo Data</span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  isDemoDataActive
+                    ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
+                    : 'bg-zinc-400 dark:bg-zinc-600'
+                }`}
+              />
+              <span className="text-[11px] font-bold tracking-tight text-on-surface whitespace-nowrap">
+                Demo Data:
+              </span>
+              <span
+                className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold uppercase transition-colors ${
+                  isDemoDataActive
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                    : 'bg-surface-container text-on-surface-variant border border-outline-variant'
+                }`}
+              >
+                {isTogglingDemoData ? '...' : isDemoDataActive ? 'ON' : 'OFF'}
+              </span>
+            </div>
+
+            {/* Switch Slider */}
+            <div
+              className={`w-7 h-4 rounded-full p-0.5 transition-colors relative flex items-center ${
+                isDemoDataActive ? 'bg-emerald-500' : 'bg-surface-container-highest'
+              }`}
+            >
+              <div
+                className={`w-3 h-3 rounded-full bg-white shadow-xs transition-transform transform ${
+                  isDemoDataActive ? 'translate-x-3' : 'translate-x-0'
+                }`}
+              />
+            </div>
           </button>
-        )}
+
+          {/* Quick Inspector Modal Trigger Icon */}
+          {onOpenDemoData && (
+            <button
+              onClick={onOpenDemoData}
+              className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-primary transition-colors cursor-pointer border-l border-outline-variant/60 pl-1.5 ml-0.5"
+              title="Inspect demo storylines & download CSV documents"
+            >
+              <span className="material-symbols-outlined text-[15px]">visibility</span>
+            </button>
+          )}
+        </div>
 
         {/* Quick action: Ingest */}
         <button

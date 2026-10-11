@@ -54,7 +54,18 @@ export default function App() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('21CSB007');
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const [isDemoDataActive, setIsDemoDataActive] = useState<boolean>(true);
+  const [isTogglingDemoData, setIsTogglingDemoData] = useState<boolean>(false);
+  const [demoDataVersion, setDemoDataVersion] = useState<number>(0);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState<number>(0);
+
+  // Check demo data status on mount
+  useEffect(() => {
+    api
+      .getDemoDataStatus()
+      .then((status) => setIsDemoDataActive(status.enabled))
+      .catch(() => setIsDemoDataActive(true));
+  }, []);
 
   // Theme state: light ("Jurisdiction") vs dark ("Obsidian")
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -100,6 +111,21 @@ export default function App() {
       setSelectedStudentId(params.studentId);
     }
     setActiveView(viewId);
+  };
+
+  const handleToggleDemoData = async () => {
+    setIsTogglingDemoData(true);
+    const nextState = !isDemoDataActive;
+    try {
+      await api.toggleDemoData(nextState);
+      setIsDemoDataActive(nextState);
+      setDemoDataVersion((v) => v + 1);
+    } catch (err: any) {
+      console.error('Failed to toggle demo data:', err);
+      alert(`Failed to toggle demo data: ${err.message}`);
+    } finally {
+      setIsTogglingDemoData(false);
+    }
   };
 
   const handleExportReport = async () => {
@@ -159,13 +185,16 @@ export default function App() {
           onExportReport={handleExportReport}
           onOpenIngest={() => setActiveView('ingestion')}
           onOpenDemoData={() => setShowDemoModal(true)}
+          isDemoDataActive={isDemoDataActive}
+          isTogglingDemoData={isTogglingDemoData}
+          onToggleDemoData={handleToggleDemoData}
           unreadCount={unreadAlertsCount}
           isDarkMode={isDarkMode}
           onToggleTheme={toggleTheme}
         />
 
         {/* Scrollable Main Content Area */}
-        <main className="flex-1 mt-[64px] p-6 overflow-y-auto bg-background">
+        <main key={`${demoDataVersion}-${activeView}`} className="flex-1 mt-[64px] p-6 overflow-y-auto bg-background">
           {activeView === 'dashboard' && (
             <DashboardView
               onNavigate={handleNavigate}
