@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SideNavBar } from './components/layout/SideNavBar';
 import { TopHeader } from './components/layout/TopHeader';
 import { RoleSwitcherModal } from './components/layout/RoleSwitcherModal';
+import { DemoDataModal } from './components/layout/DemoDataModal';
 
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
@@ -52,6 +53,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('21CSB007');
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState<number>(0);
 
   // Theme state: light ("Jurisdiction") vs dark ("Obsidian")
@@ -156,6 +158,7 @@ export default function App() {
           onNotificationsClick={() => setActiveView('alerts')}
           onExportReport={handleExportReport}
           onOpenIngest={() => setActiveView('ingestion')}
+          onOpenDemoData={() => setShowDemoModal(true)}
           unreadCount={unreadAlertsCount}
           isDarkMode={isDarkMode}
           onToggleTheme={toggleTheme}
@@ -229,6 +232,13 @@ export default function App() {
         onSelectRole={handleRoleSelect}
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
+      />
+
+      {/* Demo Data Inspector & Downloader Modal */}
+      <DemoDataModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+        onNavigate={handleNavigate}
       />
     </div>
   );

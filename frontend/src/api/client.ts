@@ -589,6 +589,38 @@ class ApiClient {
     });
   }
 
+  async getDemoDataSummary(): Promise<{
+    section: string;
+    cohort_name: string;
+    school_days: number;
+    date_range: string;
+    storylines: Array<{
+      id: string;
+      title: string;
+      students: Array<{ roll: string; name: string }>;
+      subject?: string;
+      subject_name?: string;
+      pattern: string;
+      how_to_verify: string;
+    }>;
+    files: Record<
+      string,
+      {
+        filename: string;
+        label: string;
+        total_rows: number;
+        preview: Array<Record<string, string>>;
+        error?: string;
+      }
+    >;
+  }> {
+    return this.request('/admin/demo-data');
+  }
+
+  getDemoFileDownloadUrl(fileKey: string): string {
+    return `${this.baseUrl}/admin/demo-data/file/${fileKey}`;
+  }
+
   // ── Connection Engine v3 API (§7.3) ─────────────────────────────────────────
   async getBunkGraph(
     sectionCode = 'CS-3B',

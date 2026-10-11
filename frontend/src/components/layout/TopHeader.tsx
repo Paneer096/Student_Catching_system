@@ -13,6 +13,7 @@ export interface TopHeaderProps {
   onNotificationsClick: () => void;
   onExportReport: () => void;
   onOpenIngest: () => void;
+  onOpenDemoData?: () => void;
   unreadCount?: number;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
@@ -26,6 +27,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onNotificationsClick,
   onExportReport,
   onOpenIngest,
+  onOpenDemoData,
   unreadCount = 3,
   isDarkMode = false,
   onToggleTheme,
@@ -77,6 +79,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* ─── Right: Actions & User Persona Profile ──────────────────────────────── */}
       <div className="flex items-center gap-2">
+        {/* Demo Data Inspector button */}
+        {onOpenDemoData && (
+          <button
+            onClick={onOpenDemoData}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary-container/40 hover:bg-secondary-container border border-secondary/40 text-on-secondary-container rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+            title="Inspect & download presentation demo data (CS-3B)"
+          >
+            <span className="material-symbols-outlined text-[15px] text-secondary">database</span>
+            <span>Demo Data</span>
+          </button>
+        )}
+
         {/* Quick action: Ingest */}
         <button
           onClick={onOpenIngest}
