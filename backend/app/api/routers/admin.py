@@ -76,6 +76,37 @@ async def load_sample_data(db: AsyncSession = Depends(get_db)):
             detail="sample_data directory not found on filesystem."
         )
 
+    from app.connection.engine_service import _ENGINE_CACHE
+    from app.models.orm import (
+        Attendance,
+        Student,
+        TimetableSlot,
+        CalendarDay,
+        IngestionBatch,
+        MembershipTie,
+        PeerNomination,
+        Leave,
+        DerivedEdge,
+        EdgeDismissal,
+        EngineRun,
+    )
+    from sqlalchemy import delete
+
+    # Clear cache and purge stale records so fresh sample data loads cleanly
+    _ENGINE_CACHE.clear()
+    await db.execute(delete(Attendance))
+    await db.execute(delete(Student))
+    await db.execute(delete(TimetableSlot))
+    await db.execute(delete(CalendarDay))
+    await db.execute(delete(IngestionBatch))
+    await db.execute(delete(MembershipTie))
+    await db.execute(delete(PeerNomination))
+    await db.execute(delete(Leave))
+    await db.execute(delete(DerivedEdge))
+    await db.execute(delete(EdgeDismissal))
+    await db.execute(delete(EngineRun))
+    await db.flush()
+
     results = {}
 
     # 1. Students CSV

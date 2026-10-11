@@ -76,6 +76,15 @@ class Settings(BaseSettings):
         "extra": "ignore",
     }
 
+    @property
+    def RESOLVED_DATABASE_URL(self) -> str:
+        """Resolve relative SQLite database paths deterministically to backend/makerove.db."""
+        if self.DATABASE_URL.startswith("sqlite+aiosqlite:///./"):
+            rel_path = self.DATABASE_URL.removeprefix("sqlite+aiosqlite:///./")
+            abs_path = (BASE_DIR / rel_path).resolve()
+            return f"sqlite+aiosqlite:///{abs_path.as_posix()}"
+        return self.DATABASE_URL
+
 
 @lru_cache()
 def get_settings() -> Settings:

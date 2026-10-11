@@ -17,7 +17,7 @@ from app.models.orm import Base
 settings = get_settings()
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.RESOLVED_DATABASE_URL,
     echo=settings.DATABASE_ECHO,
     future=True,
 )

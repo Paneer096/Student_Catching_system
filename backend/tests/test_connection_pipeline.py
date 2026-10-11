@@ -103,6 +103,22 @@ def test_ingestion_and_graph_pipeline(client):
     job_res = client.get(f"/api/jobs/{job_id}")
     assert job_res.status_code == 200
 
+    # 9. Clean up test batch and cache so test data does not pollute the database
+    from app.connection.engine_service import _ENGINE_CACHE
+    import sqlite3
+    from app.config.settings import BASE_DIR
+
+    _ENGINE_CACHE.clear()
+    batch_id = commit_body["batch_id"]
+    db_path = BASE_DIR / "makerove.db"
+    conn = sqlite3.connect(db_path, timeout=15.0)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM attendance WHERE batch_id = ?", (batch_id,))
+    cur.execute("DELETE FROM ingestion_batches WHERE id = ?", (batch_id,))
+    cur.execute("DELETE FROM edge_dismissals WHERE section_code = 'CS-3B'")
+    conn.commit()
+    conn.close()
+
 
 def test_ui_placeholders_return_501(client):
     assert client.get("/api/sections/CS-3B/graph-screen").status_code == 501
