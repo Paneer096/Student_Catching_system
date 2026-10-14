@@ -26,3 +26,8 @@ Assumptions, trade-offs, and design decisions made during development.
 ### D005: Project Name
 - **Decision:** Renamed from "EduGraph" to "Makerove" per user instruction.
 - **Rationale:** User preference. All code, UI text, and documentation use "Makerove".
+
+### D006: Teacher Manual Peer Connections (Guardrail G4 & G10)
+- **Decision:** Allow teachers to manually record observed peer connections (e.g. Study Partner, Seating Tie, Project Team) directly into the knowledge graph with immutable audit logging.
+- **Rationale:** Supports teacher-in-the-loop pedagogical agency (Guardrail G4) without punitive consequences. Every creation and deletion is recorded to the hash-chained audit ledger (`AuditLog`) per Guardrail G10. Manual edges are clearly demarcated (`source_type="TEACHER_MANUAL"`), preserved across neatMode filters, and render with dedicated inspector and deletion tools.
+

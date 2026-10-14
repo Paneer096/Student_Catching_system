@@ -738,3 +738,29 @@ class EdgeDismissal(Base):
         UniqueConstraint("section_code", "student_a", "student_b", name="uq_edge_dismissal"),
     )
 
+
+class TeacherConnection(Base):
+    """
+    §4 & Guardrail G4 (Teacher-in-the-loop):
+    Manual connection established by faculty / teacher between two students.
+    Stored with section_code, canonical student_a & student_b, connection_type,
+    weight/confidence, context notes, and teacher attribution for auditability.
+    """
+    __tablename__ = "teacher_connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    section_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_a: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    student_b: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    connection_type: Mapped[str] = mapped_column(String(30), nullable=False, default="STUDIES_WITH")
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("section_code", "student_a", "student_b", "connection_type", name="uq_teacher_connection"),
+    )
+
+

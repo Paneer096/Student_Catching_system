@@ -74,14 +74,20 @@ class EdgeType(str, enum.Enum):
     OBSERVED = "OBSERVED"              # Teacher → Observation → Student
     INTERVENED = "INTERVENED"          # Teacher → Intervention → Student
 
-    # Experimental, off by default — §5.4
-    LEADS_SKIPS = "LEADS_SKIPS"        # Student → Student (who tends to skip earlier)
+    # Teacher manual connections
+    STUDIES_WITH = "STUDIES_WITH"
+    SITS_WITH = "SITS_WITH"
+    PROJECT_TEAM = "PROJECT_TEAM"
+    PEER_OF = "PEER_OF"
+    TEACHER_OBSERVED = "TEACHER_OBSERVED"
 
 
 class EdgeSource(str, enum.Enum):
     """Origin of an edge in the graph."""
     SURVEY = "survey"
     DERIVED = "derived"
+    MANUAL = "manual"
+
 
 
 class FriendKind(str, enum.Enum):

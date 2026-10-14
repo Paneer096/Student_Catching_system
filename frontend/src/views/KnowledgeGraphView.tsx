@@ -5,6 +5,7 @@ import {
   BunkGraphEdge,
   PairEvidenceData,
   StudentRosterItem,
+  ManualConnectionItem,
 } from '../api/client';
 import { DOMAIN_PRESETS, DomainPreset } from '../components/knowledge-graph/domainPresets';
 import {
@@ -17,12 +18,15 @@ import { FloatingNodeHud } from '../components/knowledge-graph/FloatingNodeHud';
 import { OperationsSidebar } from '../components/knowledge-graph/OperationsSidebar';
 import { TopTacticalBar } from '../components/knowledge-graph/TopTacticalBar';
 import { CanvasToolDock } from '../components/knowledge-graph/CanvasToolDock';
+import { ManualConnectionModal } from '../components/knowledge-graph/ManualConnectionModal';
 import {
   X,
   Ban,
   AlertTriangle,
   RefreshCw,
   Sparkles,
+  Link2,
+  Trash2,
 } from 'lucide-react';
 
 export interface KnowledgeGraphViewProps {
@@ -83,8 +87,13 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   // Graph Data from Engine & Section Roster
   const [payload, setPayload] = useState<BunkGraphPayload | null>(null);
   const [rosterStudents, setRosterStudents] = useState<StudentRosterItem[]>([]);
+  const [manualConnections, setManualConnections] = useState<ManualConnectionItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Manual Connection Modal State
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
+  const [connectModalSourceStudent, setConnectModalSourceStudent] = useState<string | null>(null);
 
   // Interaction & HUD State
   const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
@@ -108,7 +117,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   const [timelineVal, setTimelineVal] = useState<number>(Date.now());
   const [isTimelinePlaying, setIsTimelinePlaying] = useState<boolean>(false);
 
-  // Fetch Graph Data + Section Roster
+  // Fetch Graph Data + Section Roster + Manual Ties
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -117,7 +126,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     setHighlightedPath(null);
 
     try {
-      const [graphRes, rosterRes] = await Promise.all([
+      const [graphRes, rosterRes, manualRes] = await Promise.all([
         api.getBunkGraph(currentSection, {
           sensitivity,
           subject: subjectFilter.trim() || undefined,
@@ -128,10 +137,15 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           console.warn('Roster fetch warning (will proceed with graph data):', err);
           return [] as StudentRosterItem[];
         }),
+        api.getManualConnections(currentSection).catch((err) => {
+          console.warn('Manual connections fetch warning:', err);
+          return [] as ManualConnectionItem[];
+        }),
       ]);
 
       setPayload(graphRes);
       setRosterStudents(rosterRes || []);
+      setManualConnections(manualRes || []);
 
       if (graphRes.status !== 'OK') {
         setErrorMsg(graphRes.message || `Engine status: ${graphRes.status}`);
@@ -311,18 +325,23 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
   const canvasEdges: CanvasEdge[] = useMemo(() => {
     if (!payload || !payload.edges) return [];
 
-    const activeNodeIds = new Set(canvasNodes.map((n) => n.id));
+    const activeNodeIds = new Set(canvasNodes.map((n) => n.id.toUpperCase()));
 
     return payload.edges
       .filter((e) => {
         // Ensure both endpoints exist in active canvas nodes
-        if (!activeNodeIds.has(e.student_a) || !activeNodeIds.has(e.student_b)) {
+        const stA = (e.student_a || '').toUpperCase();
+        const stB = (e.student_b || '').toUpperCase();
+        if (!activeNodeIds.has(stA) || !activeNodeIds.has(stB)) {
           return false;
         }
 
-        // Filter casual ties if neatMode is ON and weight is below threshold
-        if (neatMode && (e.weight || e.co_dates || 1) < minCoabsenceWeight) {
-          return false;
+        // In Neat View: filter out casual low-frequency co-absences (keep manual ties visible)
+        if (neatMode && !e.is_manual && e.source_type !== 'TEACHER_MANUAL') {
+          const skipCount = e.co_cells || e.co_dates || 1;
+          if (skipCount < minCoabsenceWeight) {
+            return false;
+          }
         }
 
         return true;
@@ -338,13 +357,17 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
         lift: e.lift,
         q_value: e.q_value,
         rawEdge: e,
+        is_manual: e.is_manual,
         properties: {
           type: e.type,
           co_cells: e.co_cells,
           co_dates: e.co_dates,
-          lift: `${e.lift?.toFixed(2)}x`,
+          lift: e.is_manual ? 'Manual Tie' : `${e.lift?.toFixed(2)}x`,
           q_value: e.q_value,
           dismissed: e.dismissed,
+          is_manual: e.is_manual,
+          notes: e.notes,
+          created_by: e.created_by,
         },
       }));
   }, [payload, canvasNodes, neatMode, minCoabsenceWeight]);
@@ -380,12 +403,21 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
         return;
       }
 
-      const rollA = edge.student_a || (typeof edge.source === 'object' ? edge.source.id : edge.source);
-      const rollB = edge.student_b || (typeof edge.target === 'object' ? edge.target.id : edge.target);
+      const raw = edge.rawEdge || edge;
+      const rollA = raw.student_a || (typeof raw.source === 'object' ? raw.source.id : raw.source);
+      const rollB = raw.student_b || (typeof raw.target === 'object' ? raw.target.id : raw.target);
 
       if (!rollA || !rollB) return;
 
-      setSelectedEdge(edge.rawEdge || edge);
+      setSelectedEdge(raw);
+
+      // If it is a teacher manual edge, statistical pair evidence is not applicable
+      if (raw.is_manual || raw.source_type === 'TEACHER_MANUAL') {
+        setEvidenceData(null);
+        setEvidenceLoading(false);
+        return;
+      }
+
       setEvidenceLoading(true);
 
       try {
@@ -400,6 +432,36 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
     },
     [currentSection]
   );
+
+  // Manual Connection Handlers
+  const handleDeleteManualConnection = async (connectionId: string) => {
+    try {
+      await api.deleteManualConnection(currentSection, connectionId);
+      if (selectedEdge?.connection_id === connectionId || selectedEdge?.id === connectionId) {
+        setSelectedEdge(null);
+      }
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete manual connection:', err);
+      alert(`Deletion failed: ${err?.message || 'Server error'}`);
+    }
+  };
+
+  const handleQuickInjectEdge = async (edgeData: { source: string; target: string; type: string; weight?: number; notes?: string }) => {
+    try {
+      await api.createManualConnection(currentSection, {
+        student_a: edgeData.source,
+        student_b: edgeData.target,
+        connection_type: edgeData.type,
+        weight: edgeData.weight ?? 1.0,
+        notes: edgeData.notes,
+      });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to establish connection:', err);
+      alert(`Failed to establish connection: ${err?.message || 'Server error'}`);
+    }
+  };
 
   // Dismiss Edge Handler (§6 & §7.3)
   const handleDismissEdge = async () => {
@@ -512,6 +574,10 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
         showWholeClass={showWholeClass}
         onToggleWholeClass={() => setShowWholeClass((prev) => !prev)}
         totalClassCount={rosterStudents.length || 60}
+        onOpenConnectModal={() => {
+          setConnectModalSourceStudent(null);
+          setIsConnectModalOpen(true);
+        }}
       />
 
       {/* ── Main Canvas Viewport ── */}
@@ -573,6 +639,10 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           onFocusNode={(nodeId) => canvasRef.current?.focusNode(nodeId)}
           onSelectAsPathSource={(nodeId) => setPathSource(nodeId)}
           onFilterNeighbors={handleFilterNeighbors}
+          onConnectStudent={(roll) => {
+            setConnectModalSourceStudent(roll);
+            setIsConnectModalOpen(true);
+          }}
           onOpenDetail={(targetNode) => {
             if (targetNode.type === 'Student') {
               const roll = targetNode.properties?.roll_no || targetNode.id;
@@ -633,7 +703,13 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           onClearPath={() => setHighlightedPath(null)}
           pathError={pathError}
           onInjectNode={() => {}}
-          onInjectEdge={() => {}}
+          onInjectEdge={handleQuickInjectEdge}
+          manualConnections={manualConnections}
+          onDeleteManualConnection={handleDeleteManualConnection}
+          onOpenConnectModal={() => {
+            setConnectModalSourceStudent(null);
+            setIsConnectModalOpen(true);
+          }}
           timelineRange={{ min: Date.now() - 30 * 86400000, max: Date.now(), current: timelineVal }}
           onTimelineChange={setTimelineVal}
           isTimelinePlaying={isTimelinePlaying}
@@ -675,17 +751,17 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           onExportJson={() => canvasRef.current?.exportJson()}
         />
 
-        {/* ── Slide-Out Pair Evidence Drawer (When Edge is Clicked) ── */}
+        {/* ── Slide-Out Drawer (When Edge is Clicked) ── */}
         {selectedEdge && (
           <aside className="absolute right-4 top-20 bottom-4 w-96 z-30 bg-black/85 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden text-white animate-in slide-in-from-right duration-200 select-none">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-400 text-[18px]">
-                  verified_user
+                <span className={`material-symbols-outlined ${selectedEdge.is_manual ? 'text-cyan-400' : 'text-amber-400'} text-[18px]`}>
+                  {selectedEdge.is_manual ? 'edit_note' : 'verified_user'}
                 </span>
                 <span className="text-xs font-bold uppercase tracking-wider font-mono">
-                  Statistical Pair Evidence
+                  {selectedEdge.is_manual ? 'Teacher Manual Tie' : 'Statistical Pair Evidence'}
                 </span>
               </div>
               <button
@@ -700,7 +776,99 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
               </button>
             </div>
 
-            {evidenceLoading ? (
+            {selectedEdge.is_manual ? (
+              <div className="flex-1 overflow-y-auto pt-3 space-y-4 text-xs font-sans">
+                {/* Manual Educational Connection Card */}
+                <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-xl space-y-2">
+                  <div className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Link2 size={13} />
+                    <span>Pedagogical Observation</span>
+                  </div>
+                  <p className="text-gray-200 leading-relaxed text-xs">
+                    This connection was established directly by faculty or academic advisors to reflect known collaborative, seating, or study partnerships.
+                  </p>
+                </div>
+
+                {/* Connected Students Summary */}
+                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl space-y-2">
+                  <div className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider">
+                    Connected Peers
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="p-2 bg-white/[0.04] rounded-lg border border-white/5">
+                      <div className="text-white font-bold font-mono text-xs truncate">
+                        {rosterStudents.find((s) => s.roll_no.toUpperCase() === selectedEdge.student_a?.toUpperCase())?.name || selectedEdge.student_a}
+                      </div>
+                      <div className="text-[10px] text-cyan-400 font-mono mt-0.5">{selectedEdge.student_a}</div>
+                    </div>
+                    <div className="p-2 bg-white/[0.04] rounded-lg border border-white/5">
+                      <div className="text-white font-bold font-mono text-xs truncate">
+                        {rosterStudents.find((s) => s.roll_no.toUpperCase() === selectedEdge.student_b?.toUpperCase())?.name || selectedEdge.student_b}
+                      </div>
+                      <div className="text-[10px] text-cyan-400 font-mono mt-0.5">{selectedEdge.student_b}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connection Attributes Grid */}
+                <div className="grid grid-cols-2 gap-2 font-mono">
+                  <div className="bg-white/[0.04] p-2.5 rounded-xl border border-white/5">
+                    <div className="text-[10px] text-gray-400 uppercase">Tie Classification</div>
+                    <div className="text-xs font-bold text-amber-300 mt-1 truncate">
+                      {selectedEdge.type?.replace(/_/g, ' ') || 'STUDIES_WITH'}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.04] p-2.5 rounded-xl border border-white/5">
+                    <div className="text-[10px] text-gray-400 uppercase">Strength / Weight</div>
+                    <div className="text-xs font-bold text-cyan-400 mt-1">
+                      {((selectedEdge.weight ?? 1.0) * 100).toFixed(0)}% ({selectedEdge.weight ?? 1.0})
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.04] p-2.5 rounded-xl border border-white/5 col-span-2">
+                    <div className="text-[10px] text-gray-400 uppercase">Source Attribution</div>
+                    <div className="text-xs font-bold text-gray-200 mt-0.5 flex items-center justify-between">
+                      <span>{selectedEdge.created_by || 'Teacher / Faculty'}</span>
+                      <span className="text-[10px] text-emerald-400 font-normal">Audit Logged (G10)</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pedagogical Context Notes */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-mono text-gray-400 font-semibold uppercase tracking-wider">
+                    Faculty Observation Notes
+                  </div>
+                  <div className="p-3 bg-white/[0.02] border border-white/10 rounded-xl text-gray-300 leading-relaxed text-xs italic">
+                    {selectedEdge.notes ? (
+                      `"${selectedEdge.notes}"`
+                    ) : (
+                      <span className="text-gray-500 not-italic">No observational notes recorded for this tie.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* DPDP Guardrail Notice */}
+                <div className="p-2.5 bg-blue-950/20 border border-blue-500/20 rounded-xl text-[10px] text-blue-300/80 leading-relaxed">
+                  <strong>Guardrail G4 & DPDP §9:</strong> Teacher manual connections represent supportive pedagogical observations and do not contribute to disciplinary sanctions or automated punitive flags.
+                </div>
+
+                {/* Delete / Remove Manual Connection */}
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      const connId = selectedEdge.connection_id || selectedEdge.id;
+                      if (connId) {
+                        handleDeleteManualConnection(connId);
+                      }
+                    }}
+                    className="w-full py-2 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-2 hover:border-rose-500/50"
+                  >
+                    <Trash2 size={14} />
+                    <span>Remove Manual Connection</span>
+                  </button>
+                </div>
+              </div>
+            ) : evidenceLoading ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 text-cyan-400">
                 <RefreshCw size={24} className="animate-spin" />
                 <span className="font-mono text-xs text-gray-400">
@@ -844,6 +1012,26 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
             )}
           </aside>
         )}
+
+        {/* ── Manual Student Connection Modal Dialog ── */}
+        <ManualConnectionModal
+          isOpen={isConnectModalOpen}
+          onClose={() => {
+            setIsConnectModalOpen(false);
+            setConnectModalSourceStudent(null);
+          }}
+          onSuccess={loadData}
+          sectionCode={currentSection}
+          students={
+            rosterStudents.length > 0
+              ? rosterStudents
+              : (payload?.nodes || []).map((n) => ({
+                  roll_no: n.roll_no,
+                  name: n.name,
+                }))
+          }
+          initialStudentA={connectModalSourceStudent}
+        />
       </div>
     </div>
   );

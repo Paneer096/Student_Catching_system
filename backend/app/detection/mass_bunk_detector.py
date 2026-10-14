@@ -2,7 +2,7 @@
 Makerove — Mass Bunk Detector
 
 Detects coordinated group absences by analyzing actual attendance records in SQLite.
-Uses community cohesion and subgraph PageRank to identify structural anchors / ringleaders.
+Uses community cohesion and structural anchor identification.
 Every alert corresponds to verifiable database records.
 """
 from __future__ import annotations
@@ -22,9 +22,9 @@ async def detect_mass_bunks(db: AsyncSession, section_code: str = "CS-3B") -> li
     """
     Detect mass bunks from real attendance records.
     
-    A session is flagged as a mass bunk if:
-    1. >= 3 students absent simultaneously.
-    2. Total absent share >= 25% of section strength.
+    A session is flagged as an anomalous mass bunk if:
+    1. >= 4 students absent simultaneously.
+    2. Total absent share >= 8% of section strength (e.g. >= 5 students in a class of 60).
     """
     # 1. Fetch section
     stmt_sec = select(Section).where(Section.code == section_code)
@@ -42,7 +42,7 @@ async def detect_mass_bunks(db: AsyncSession, section_code: str = "CS-3B") -> li
 
     student_map = {s.id: s for s in students}
     section_size = len(students)
-    min_bunk_threshold = max(3, math.ceil(section_size * 0.25))
+    min_bunk_threshold = max(4, math.ceil(section_size * 0.08))
 
     # 3. Fetch all attendance for section students
     stmt_att = select(Attendance).where(Attendance.student_id.in_(list(student_map.keys())))
@@ -56,6 +56,12 @@ async def detect_mass_bunks(db: AsyncSession, section_code: str = "CS-3B") -> li
         if att.status == "ABSENT":
             session_data.setdefault(key, []).append(att.student_id)
 
+    # Pre-count total absences per student across all sessions to identify structural anchors
+    student_total_absences = {
+        s.id: sum(1 for att in records if att.student_id == s.id and att.status == "ABSENT")
+        for s in students
+    }
+
     # 4. Check for sessions exceeding threshold
     detected_events = []
     for (d, period, subj), absent_ids in session_data.items():
@@ -63,14 +69,13 @@ async def detect_mass_bunks(db: AsyncSession, section_code: str = "CS-3B") -> li
             absent_students = [student_map[sid] for sid in absent_ids if sid in student_map]
             absent_rolls = [s.roll_no for s in absent_students]
 
-            # Build small co-absence graph to identify ringleader among absentees
-            sub_G = nx.complete_graph(len(absent_ids))
-            # Find student with highest overall absence rate to serve as primary anchor
-            anchor_student = absent_students[0]
+            # Find student with highest overall absence rate in this cohort to serve as primary anchor
+            anchor_id = max(absent_ids, key=lambda sid: student_total_absences.get(sid, 0))
+            anchor_student = student_map.get(anchor_id, absent_students[0])
 
             # Compute risk percentage based on proportion of class absent
             absent_ratio = len(absent_ids) / section_size
-            risk_score = min(98, round(absent_ratio * 100 * 1.1, 1))
+            risk_score = min(98, max(75, round(70.0 + (absent_ratio * 150.0), 1)))
 
             day_name = d.strftime("%A")
             detected_events.append({
@@ -88,9 +93,10 @@ async def detect_mass_bunks(db: AsyncSession, section_code: str = "CS-3B") -> li
                     "name": anchor_student.name,
                 },
                 "participating_roll_numbers": absent_rolls,
-                "reason": f"{len(absent_ids)} of {section_size} students ({round(absent_ratio * 100)}%) coordinated absence on {day_name} Period {period}.",
+                "reason": f"{len(absent_ids)} of {section_size} students ({round(absent_ratio * 100)}%) coordinated absence on {day_name} Period {period} ({subj}).",
             })
 
     # Sort most recent first
-    detected_events.sort(key=lambda x: x["date"], reverse=True)
+    detected_events.sort(key=lambda x: (x["date"], x["period"]), reverse=True)
     return detected_events
+

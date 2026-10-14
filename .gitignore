@@ -44,6 +44,8 @@ coverage.xml
 *.sqlite
 *.sqlite3
 makerove.db
+*.db-shm
+*.db-wal
 
 # Environment variables & secrets
 .env

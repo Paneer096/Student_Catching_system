@@ -41,6 +41,13 @@ from app.connection.engine_service import (
     dismiss_edge,
     run_shuffle_control_job,
     get_job_status,
+    load_teacher_connections,
+    create_teacher_connection,
+    delete_teacher_connection,
+)
+from app.models.schemas import (
+    CreateManualConnectionRequest,
+    ManualConnectionResponse,
 )
 
 router = APIRouter(tags=["Connection Engine v3"])
@@ -344,6 +351,115 @@ async def post_dismiss_pair(
         db, who=who, action="DISMISS_EDGE", obj=f"pair:{a}|{b}", detail={"reason": payload.reason}
     )
     return res
+
+
+# ─── Manual Teacher Connections (§4 & Guardrail G4) ───────────────────────────
+
+@router.get("/sections/{code}/manual-connections", response_model=list[ManualConnectionResponse])
+async def get_manual_connections(
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> list[ManualConnectionResponse]:
+    """Returns all teacher-established manual connections for the section."""
+    await check_section_access(request, code, db)
+    conns = await load_teacher_connections(db, code)
+    return [
+        ManualConnectionResponse(
+            id=c.id,
+            section_code=c.section_code,
+            student_a=c.student_a,
+            student_b=c.student_b,
+            connection_type=c.connection_type,
+            weight=c.weight,
+            notes=c.notes,
+            created_by=c.created_by,
+            created_at=c.created_at.isoformat() if hasattr(c.created_at, "isoformat") else str(c.created_at),
+        )
+        for c in conns
+    ]
+
+
+@router.post("/sections/{code}/manual-connections", response_model=ManualConnectionResponse)
+async def post_create_manual_connection(
+    code: str,
+    payload: CreateManualConnectionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> ManualConnectionResponse:
+    """
+    Creates or updates a teacher-observed manual connection between two students.
+    Writes to the immutable audit ledger (§7.4 / G10).
+    """
+    who = await check_section_access(request, code, db)
+
+    st_a = payload.student_a.strip().upper()
+    st_b = payload.student_b.strip().upper()
+    if not st_a or not st_b:
+        raise HTTPException(status_code=400, detail="Both student identifiers are required.")
+    if st_a == st_b:
+        raise HTTPException(status_code=400, detail="Cannot establish connection to the same student.")
+
+    conn = await create_teacher_connection(
+        db=db,
+        section_code=code,
+        student_a=st_a,
+        student_b=st_b,
+        connection_type=payload.connection_type.strip().upper(),
+        weight=payload.weight,
+        notes=payload.notes.strip() if payload.notes else None,
+        created_by=who,
+    )
+
+    await log_audit(
+        db,
+        who=who,
+        action="CREATE_MANUAL_CONNECTION",
+        obj=f"section:{code}:pair:{conn.student_a}|{conn.student_b}",
+        detail={
+            "connection_id": conn.id,
+            "connection_type": conn.connection_type,
+            "weight": conn.weight,
+            "notes": conn.notes,
+        },
+    )
+
+    return ManualConnectionResponse(
+        id=conn.id,
+        section_code=conn.section_code,
+        student_a=conn.student_a,
+        student_b=conn.student_b,
+        connection_type=conn.connection_type,
+        weight=conn.weight,
+        notes=conn.notes,
+        created_by=conn.created_by,
+        created_at=conn.created_at.isoformat() if hasattr(conn.created_at, "isoformat") else str(conn.created_at),
+    )
+
+
+@router.delete("/sections/{code}/manual-connections/{connection_id}")
+async def delete_manual_connection_endpoint(
+    code: str,
+    connection_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Deletes a teacher manual connection with immutable audit log (§7.4 / G10)."""
+    who = await check_section_access(request, code, db)
+    deleted = await delete_teacher_connection(db, connection_id=connection_id, section_code=code)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Manual connection not found.")
+
+    await log_audit(
+        db,
+        who=who,
+        action="DELETE_MANUAL_CONNECTION",
+        obj=f"section:{code}:connection:{connection_id}",
+        detail={"connection_id": connection_id},
+    )
+
+    return {"deleted": True, "connection_id": connection_id}
+
 
 
 # ─── Diagnostics (§7.3 & §7.5) ────────────────────────────────────────────────

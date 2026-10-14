@@ -455,5 +455,29 @@ class DismissRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
 
 
+# ─── Manual Connection Schemas (§4 / G4) ─────────────────────────────────────
+
+class CreateManualConnectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    student_a: str = Field(..., min_length=1, max_length=30)
+    student_b: str = Field(..., min_length=1, max_length=30)
+    connection_type: str = Field(default="STUDIES_WITH", max_length=30)
+    weight: float = Field(default=1.0, ge=0.1, le=5.0)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class ManualConnectionResponse(BaseModel):
+    id: str
+    section_code: str
+    student_a: str
+    student_b: str
+    connection_type: str
+    weight: float
+    notes: str | None = None
+    created_by: str
+    created_at: str
+
+
 # Fix forward reference
 AuthMeResponse.model_rebuild()
+

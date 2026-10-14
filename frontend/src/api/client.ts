@@ -278,6 +278,34 @@ export interface CalendarRiskDay {
   is_bridge_day?: boolean;
   has_lab?: boolean;
   has_detected_bunk?: boolean;
+  least_favourable_subject?: {
+    subject_code: string;
+    attendance_pct: number;
+    bunk_count: number;
+    period: number;
+    risk_boost: number;
+  } | null;
+  overall_day_risk?: number;
+  overall_day_level?: 'HIGH' | 'MEDIUM' | 'LOW';
+  subject_walkout_risk?: number;
+  subject_walkout_level?: 'HIGH' | 'MEDIUM' | 'LOW';
+  most_vulnerable_subject?: {
+    subject_code: string;
+    period: number;
+    attendance_pct: number;
+    bunk_count: number;
+    walkout_score: number;
+    walkout_level: 'HIGH' | 'MEDIUM' | 'LOW';
+    is_closing_period: boolean;
+    reason: string;
+  } | null;
+  predicted_mass_bunk?: boolean;
+  mass_bunk_scope?: 'WHOLE_DAY' | 'SPECIFIC_LECTURE' | 'COMPOUND' | null;
+  target_lecture?: {
+    period: number;
+    subject_code: string;
+    description?: string;
+  } | null;
   bunk_details?: {
     absent_count: number;
     total_enrolled: number;
@@ -522,6 +550,7 @@ class ApiClient {
     is_pre_holiday?: boolean;
     is_exam_proximity?: boolean;
     cohort_risk_tier?: string;
+    is_least_favourable?: boolean;
     student_roll?: string;
     section?: string;
   }): Promise<CalibratedPredictionResult> {
@@ -689,6 +718,58 @@ class ApiClient {
       }
     );
   }
+
+  // ── Manual Teacher Connections (§4 / G4) ───────────────────────────────────
+  async getManualConnections(sectionCode: string): Promise<ManualConnectionItem[]> {
+    return this.request<ManualConnectionItem[]>(
+      `/sections/${encodeURIComponent(sectionCode)}/manual-connections`
+    );
+  }
+
+  async createManualConnection(
+    sectionCode: string,
+    payload: CreateManualConnectionPayload
+  ): Promise<ManualConnectionItem> {
+    return this.request<ManualConnectionItem>(
+      `/sections/${encodeURIComponent(sectionCode)}/manual-connections`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+  }
+
+  async deleteManualConnection(
+    sectionCode: string,
+    connectionId: string
+  ): Promise<{ deleted: boolean; connection_id: string }> {
+    return this.request(
+      `/sections/${encodeURIComponent(sectionCode)}/manual-connections/${encodeURIComponent(connectionId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+}
+
+export interface ManualConnectionItem {
+  id: string;
+  section_code: string;
+  student_a: string;
+  student_b: string;
+  connection_type: string;
+  weight: number;
+  notes?: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface CreateManualConnectionPayload {
+  student_a: string;
+  student_b: string;
+  connection_type?: string;
+  weight?: number;
+  notes?: string;
 }
 
 export interface BunkGraphNode {
@@ -725,6 +806,11 @@ export interface BunkGraphEdge {
   has_social_tie: boolean;
   has_context_tie: boolean;
   dismissed: boolean;
+  is_manual?: boolean;
+  notes?: string;
+  created_by?: string;
+  created_at?: string;
+  connection_id?: string;
 }
 
 export interface BunkGroupInfo {
@@ -804,6 +890,7 @@ export interface CalibratedPredictionResult {
     is_pre_holiday: boolean;
     is_exam_proximity: boolean;
     cohort_risk_tier: string;
+    is_least_favourable?: boolean;
   };
 }
 

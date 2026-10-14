@@ -157,7 +157,7 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     return {
       nodes: nodes.map((n) => ({
         ...n,
-        color: nodeTypesMap[n.type]?.color || '#00b4ff',
+        color: n.color || nodeTypesMap[n.type]?.color || '#00b4ff',
       })),
       links,
     };
@@ -431,14 +431,23 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
     ctx.fill();
   }, []);
 
-  // Custom Link Canvas Renderer (§6 spec colors and thickness)
-  const renderCustomLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const src = link.source;
-    const tgt = link.target;
-    if (!src || !tgt || src.x === undefined || tgt.x === undefined) return;
+  // Helper to reliably resolve coordinates whether endpoint is object or string ID
+  const getNodePos = useCallback((endpoint: any) => {
+    if (typeof endpoint === 'object' && endpoint !== null && endpoint.x !== undefined) {
+      return endpoint;
+    }
+    const id = String(typeof endpoint === 'object' ? endpoint?.id : endpoint);
+    return consolidatedGraphData.nodes.find((n) => n.id === id || (n as any).roll_no === id);
+  }, [consolidatedGraphData.nodes]);
 
-    const srcId = String(typeof src === 'object' ? src.id : src);
-    const tgtId = String(typeof tgt === 'object' ? tgt.id : tgt);
+  // Custom Link Canvas Renderer (§6 spec colors and thickness)
+  const renderCustomLink = useCallback((link: any, ctx: CanvasRenderingContext2D, _globalScale: number) => {
+    const srcNode = getNodePos(link.source);
+    const tgtNode = getNodePos(link.target);
+    if (!srcNode || !tgtNode || srcNode.x === undefined || tgtNode.x === undefined) return;
+
+    const srcId = String(srcNode.id);
+    const tgtId = String(tgtNode.id);
 
     const isPathEdge = link.isPathEdge;
     const isSelectedEdge = selectedNode ? (srcId === selectedNode.id || tgtId === selectedNode.id) : false;
@@ -448,71 +457,88 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
 
     // Spec color contract (§6):
     // BUNKS_WITH: #D55E00 (vermilion), NAMED_FRIEND: #009E73, SITS_WITH: #0072B2, SAME_CLUB: #CC79A7, PROJECT_TEAM: #E69F00
+    // STUDIES_WITH: #06b6d4, TEACHER_OBSERVED: #8b5cf6, PEER_OF: #ec4899
     let strokeColor = '#D55E00';
     const edgeType = link.type || (link.rawEdges?.[0]?.type ?? 'BUNKS_WITH');
-    if (edgeType.includes('NAMED_FRIEND')) strokeColor = '#009E73';
+    const isManual = Boolean(link.rawEdges?.some((e: any) => e.is_manual || e.source_type === 'TEACHER_MANUAL'));
+
+    if (edgeType.includes('STUDIES_WITH')) strokeColor = '#06b6d4';
+    else if (edgeType.includes('TEACHER_OBSERVED')) strokeColor = '#8b5cf6';
+    else if (edgeType.includes('PEER_OF')) strokeColor = '#ec4899';
+    else if (edgeType.includes('NAMED_FRIEND')) strokeColor = '#009E73';
     else if (edgeType.includes('SITS_WITH')) strokeColor = '#0072B2';
     else if (edgeType.includes('SAME_CLUB')) strokeColor = '#CC79A7';
     else if (edgeType.includes('PROJECT_TEAM')) strokeColor = '#E69F00';
     else if (edgeType.includes('BUNKS_WITH')) strokeColor = '#D55E00';
 
     const weight = link.weight ?? (link.rawEdges?.[0]?.weight ?? 0.5);
-    const thickness = Math.max(1.5, Math.min(6, weight * 5.5)) / globalScale;
+    const thickness = Math.max(2, Math.min(6, weight * 3.5));
 
     ctx.save();
 
     if (isDimmed) {
-      ctx.globalAlpha = 0.15;
+      ctx.globalAlpha = 0.2;
     } else {
       ctx.globalAlpha = isDirectlyFocused ? 1.0 : 0.85;
     }
 
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = isDirectlyFocused ? thickness * 1.4 : thickness;
+    ctx.lineWidth = isDirectlyFocused ? thickness * 1.5 : thickness;
 
     // Dashed if one-way overlay tie
     if (link.rawEdges?.[0]?.kind === 'one_way') {
-      ctx.setLineDash([5 / globalScale, 5 / globalScale]);
+      ctx.setLineDash([6, 6]);
     } else {
       ctx.setLineDash([]);
     }
 
     ctx.beginPath();
-    ctx.moveTo(src.x, src.y);
-    ctx.lineTo(tgt.x, tgt.y);
+    ctx.moveTo(srcNode.x, srcNode.y);
+    ctx.lineTo(tgtNode.x, tgtNode.y);
     ctx.stroke();
 
-    // Corroboration badge (§6): small badge on BUNKS_WITH edge when corroborated
-    const raw0 = link.rawEdges?.[0];
-    if (raw0 && (raw0.has_social_tie || raw0.has_context_tie) && !isDimmed) {
-      const midX = (src.x + tgt.x) / 2;
-      const midY = (src.y + tgt.y) / 2;
+    // Teacher Manual Connection Badge: distinct marker on manual edges
+    const midX = (srcNode.x + tgtNode.x) / 2;
+    const midY = (srcNode.y + tgtNode.y) / 2;
+    if (isManual && !isDimmed) {
       ctx.beginPath();
-      ctx.arc(midX, midY, 4 / globalScale, 0, 2 * Math.PI);
-      ctx.fillStyle = raw0.has_social_tie ? '#009E73' : '#0072B2';
+      ctx.arc(midX, midY, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = strokeColor;
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1 / globalScale;
+      ctx.lineWidth = 2;
       ctx.stroke();
+    } else {
+      // Corroboration badge (§6): small badge on BUNKS_WITH edge when corroborated
+      const raw0 = link.rawEdges?.[0];
+      if (raw0 && (raw0.has_social_tie || raw0.has_context_tie) && !isDimmed) {
+        ctx.beginPath();
+        ctx.arc(midX, midY, 4.5, 0, 2 * Math.PI);
+        ctx.fillStyle = raw0.has_social_tie ? '#009E73' : '#0072B2';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
-  }, [selectedNode, hoveredNode]);
+  }, [selectedNode, hoveredNode, getNodePos]);
 
   // Link Pointer Area: wide clickable area for easy edge selection
   const linkPointerAreaPaint = useCallback((link: any, paintColor: string, ctx: CanvasRenderingContext2D) => {
-    const src = link.source;
-    const tgt = link.target;
-    if (!src || !tgt || src.x === undefined || tgt.x === undefined) return;
+    const srcNode = getNodePos(link.source);
+    const tgtNode = getNodePos(link.target);
+    if (!srcNode || !tgtNode || srcNode.x === undefined || tgtNode.x === undefined) return;
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(src.x, src.y);
-    ctx.lineTo(tgt.x, tgt.y);
+    ctx.moveTo(srcNode.x, srcNode.y);
+    ctx.lineTo(tgtNode.x, tgtNode.y);
     ctx.strokeStyle = paintColor;
-    ctx.lineWidth = 12;
+    ctx.lineWidth = 14;
     ctx.stroke();
     ctx.restore();
-  }, []);
+  }, [getNodePos]);
 
   return (
     <div
@@ -532,6 +558,23 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
         linkSource="source"
         linkTarget="target"
         backgroundColor="transparent"
+        linkColor={(link: any) => {
+          const edgeType = link.type || (link.rawEdges?.[0]?.type ?? 'BUNKS_WITH');
+          if (edgeType.includes('STUDIES_WITH')) return '#06b6d4';
+          if (edgeType.includes('TEACHER_OBSERVED')) return '#8b5cf6';
+          if (edgeType.includes('PEER_OF')) return '#ec4899';
+          if (edgeType.includes('PROJECT_TEAM')) return '#E69F00';
+          if (edgeType.includes('SITS_WITH')) return '#0072B2';
+          if (edgeType.includes('SAME_CLUB')) return '#CC79A7';
+          if (edgeType.includes('NAMED_FRIEND')) return '#009E73';
+          if (link.rawEdges?.some((e: any) => e.is_manual || e.source_type === 'TEACHER_MANUAL')) return '#06b6d4';
+          return '#D55E00';
+        }}
+        linkWidth={(link: any) => {
+          const weight = link.weight ?? (link.rawEdges?.[0]?.weight ?? 1);
+          return Math.max(2, Math.min(6, weight * 3.5));
+        }}
+        linkCanvasObjectMode={() => 'after'}
         nodeCanvasObject={renderCustomNode}
         nodePointerAreaPaint={paintPointerArea}
         linkCanvasObject={renderCustomLink}
@@ -545,8 +588,10 @@ export const KnowledgeGraphCanvas = forwardRef<KnowledgeGraphCanvasRef, Knowledg
           return 2;
         }}
         linkDirectionalParticleSpeed={() => 0.009}
-        linkDirectionalParticleWidth={() => 2.5}
+        linkDirectionalParticleWidth={() => 3}
         linkDirectionalParticleColor={(link: any) => {
+          const isManual = link.rawEdges?.some((e: any) => e.is_manual || e.source_type === 'TEACHER_MANUAL');
+          if (isManual) return '#06b6d4';
           const isBunk = link.type?.includes('BUNKS_WITH');
           return isBunk ? '#D55E00' : '#38bdf8';
         }}

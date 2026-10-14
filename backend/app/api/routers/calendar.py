@@ -229,6 +229,7 @@ class PredictProbabilityRequest(BaseModel):
     cohort_risk_tier: str = Field(default="medium")  # "low" | "medium" | "high"
     student_roll: str | None = Field(default=None)
     section: str = Field(default="CS-3B")
+    is_least_favourable: bool = Field(default=False, description="Whether this lecture is the least favourable subject with high bunk frequency")
 
 
 @router.post("/predict-probability")
@@ -248,5 +249,7 @@ async def predict_probability(
         is_pre_holiday=payload.is_pre_holiday,
         is_exam_proximity=payload.is_exam_proximity,
         cohort_risk_tier=payload.cohort_risk_tier,
+        is_least_favourable=payload.is_least_favourable,
     )
+
 

@@ -33,6 +33,7 @@ from app.models.orm import (
     EngineRun,
     DerivedEdge,
     EdgeDismissal,
+    TeacherConnection,
     AuditLog,
 )
 
@@ -65,7 +66,13 @@ async def get_data_version(db: AsyncSession, section_code: str) -> int:
         )
     )
     res = await db.execute(stmt)
-    return len(res.scalars().all())
+    att_count = len(res.scalars().all())
+
+    tc_stmt = select(TeacherConnection.id).where(TeacherConnection.section_code == section_code)
+    tc_res = await db.execute(tc_stmt)
+    tc_count = len(tc_res.scalars().all())
+
+    return att_count + tc_count * 1000000
 
 
 async def load_attendance(db: AsyncSession, section_code: str) -> pd.DataFrame:
@@ -281,6 +288,89 @@ async def load_dismissals(db: AsyncSession, section_code: str) -> set[frozenset[
     return {frozenset((r.student_a, r.student_b)) for r in records}
 
 
+async def load_teacher_connections(db: AsyncSession, section_code: str) -> list[TeacherConnection]:
+    """Loads all teacher manual connections for section_code."""
+    stmt = select(TeacherConnection).where(TeacherConnection.section_code == section_code)
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def create_teacher_connection(
+    db: AsyncSession,
+    section_code: str,
+    student_a: str,
+    student_b: str,
+    connection_type: str = "STUDIES_WITH",
+    weight: float = 1.0,
+    notes: str | None = None,
+    created_by: str = "teacher",
+) -> TeacherConnection:
+    """Creates or updates a teacher manual student connection."""
+    a, b = sorted([student_a.strip().upper(), student_b.strip().upper()])
+    stmt = select(TeacherConnection).where(
+        TeacherConnection.section_code == section_code,
+        TeacherConnection.student_a == a,
+        TeacherConnection.student_b == b,
+        TeacherConnection.connection_type == connection_type,
+    )
+    res = await db.execute(stmt)
+    existing = res.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if existing:
+        existing.weight = weight
+        existing.notes = notes
+        existing.created_by = created_by
+        existing.updated_at = now
+        conn = existing
+    else:
+        conn = TeacherConnection(
+            id=str(uuid.uuid4()),
+            section_code=section_code,
+            student_a=a,
+            student_b=b,
+            connection_type=connection_type,
+            weight=weight,
+            notes=notes,
+            created_by=created_by,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(conn)
+
+    await db.commit()
+    await db.refresh(conn)
+
+    # Invalidate engine cache completely
+    _ENGINE_CACHE.clear()
+
+    return conn
+
+
+async def delete_teacher_connection(
+    db: AsyncSession,
+    connection_id: str,
+    section_code: str,
+) -> bool:
+    """Deletes a teacher manual connection."""
+    stmt = select(TeacherConnection).where(
+        TeacherConnection.id == connection_id,
+        TeacherConnection.section_code == section_code,
+    )
+    res = await db.execute(stmt)
+    conn = res.scalar_one_or_none()
+    if not conn:
+        return False
+
+    await db.delete(conn)
+    await db.commit()
+
+    # Invalidate engine cache completely
+    _ENGINE_CACHE.clear()
+
+    return True
+
+
 async def compute_graph(
     db: AsyncSession,
     section_code: str,
@@ -312,6 +402,7 @@ async def compute_graph(
     nom = await load_peer_nominations(db, section_code)
     names = await load_student_names(db, section_code)
     dismissed = await load_dismissals(db, section_code)
+    teacher_conns = await load_teacher_connections(db, section_code)
 
     prev = _PREV_GROUPS.get(section_code) if not filters else None
 
@@ -331,6 +422,7 @@ async def compute_graph(
         overlays=overlays,
         dismissed=dismissed,
         include_dismissed=include_dismissed,
+        manual_connections=teacher_conns,
     )
 
     # Persist engine run and edges to database if status is OK

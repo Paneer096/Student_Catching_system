@@ -23,6 +23,9 @@ TIE_TYPES = {
     "ELECTIVE":            ("CONTEXT", "INSTITUTION_ASSIGNED"),
     "TUTORIAL":            ("CONTEXT", "INSTITUTION_ASSIGNED"),
     "MENTOR_GROUP":        ("CONTEXT", "INSTITUTION_ASSIGNED"),
+    "STUDIES_WITH":        ("SOCIAL",  "TEACHER_OBSERVATION"),
+    "PEER_OF":             ("SOCIAL",  "TEACHER_OBSERVATION"),
+    "TEACHER_OBSERVED":    ("SOCIAL",  "TEACHER_OBSERVATION"),
 }
 MEMBERSHIP_COLS = ["roll_no", "tie_type", "key", "valid_from", "valid_to"]
 

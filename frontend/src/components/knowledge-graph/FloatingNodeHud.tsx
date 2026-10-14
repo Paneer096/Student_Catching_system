@@ -12,6 +12,7 @@ export interface FloatingNodeHudProps {
   onSelectAsPathSource: (nodeId: string) => void;
   onFilterNeighbors: (nodeId: string) => void;
   onOpenDetail?: (node: CanvasNode) => void;
+  onConnectStudent?: (studentId: string) => void;
 }
 
 export const FloatingNodeHud: React.FC<FloatingNodeHudProps> = ({
@@ -25,6 +26,7 @@ export const FloatingNodeHud: React.FC<FloatingNodeHudProps> = ({
   onSelectAsPathSource,
   onFilterNeighbors,
   onOpenDetail,
+  onConnectStudent,
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -263,6 +265,17 @@ export const FloatingNodeHud: React.FC<FloatingNodeHudProps> = ({
               <span className="material-symbols-outlined text-[15px]">filter_center_focus</span>
               <span>Neighbors</span>
             </button>
+
+            {onConnectStudent && node.type === 'Student' && (
+              <button
+                onClick={() => onConnectStudent(node.properties?.roll_no || node.id)}
+                className="col-span-3 py-1.5 px-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-semibold flex items-center justify-center gap-1.5 text-[11px] transition-colors"
+                title="Establish manual connection from this student"
+              >
+                <span className="material-symbols-outlined text-[15px]">add_link</span>
+                <span>Connect with Peer Student</span>
+              </button>
+            )}
 
             {onOpenDetail && (
               <button

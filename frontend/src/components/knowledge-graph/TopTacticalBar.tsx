@@ -18,6 +18,7 @@ export interface TopTacticalBarProps {
   showWholeClass?: boolean;
   onToggleWholeClass?: () => void;
   totalClassCount?: number;
+  onOpenConnectModal?: () => void;
 }
 
 export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
@@ -36,6 +37,7 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
   showWholeClass = false,
   onToggleWholeClass,
   totalClassCount,
+  onOpenConnectModal,
 }) => {
   const [searchCategory, setSearchCategory] = useState<'all' | 'primary' | 'connections'>('all');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -201,6 +203,21 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
           </div>
         )}
 
+        {/* Manual Connect Students Action Button */}
+        {onOpenConnectModal && (
+          <button
+            onClick={onOpenConnectModal}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono font-bold bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 transition-all shadow-[0_0_15px_rgba(6,182,212,0.25)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95"
+            title="Teacher Action: Manually establish connection between students"
+          >
+            <span className="material-symbols-outlined text-[16px] text-cyan-400">
+              add_link
+            </span>
+            <span className="hidden md:inline">CONNECT STUDENTS</span>
+            <span className="md:hidden">CONNECT</span>
+          </button>
+        )}
+
         {/* Whole Class vs Focused Tied Bunks Toggle */}
         {onToggleWholeClass && (
           <button
@@ -227,12 +244,16 @@ export const TopTacticalBar: React.FC<TopTacticalBarProps> = ({
             onClick={onToggleNeatMode}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-semibold border transition-all ${
               neatMode
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                : 'bg-white/[0.04] border-white/10 text-gray-400 hover:text-white'
+                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                : 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
             }`}
-            title={neatMode ? 'Neat Mode Active (Filtering casual co-absence noise)' : 'Dense Mode (Showing all raw co-absences)'}
+            title={
+              neatMode
+                ? 'Neat View Active: Filtering casual co-absences (< 3 mutual skips). Click to switch to Dense View.'
+                : 'Dense View Active: Showing all raw co-absences. Click to switch to Neat View.'
+            }
           >
-            <span className="material-symbols-outlined text-[15px] text-emerald-400">
+            <span className={`material-symbols-outlined text-[15px] ${neatMode ? 'text-emerald-400' : 'text-amber-400'}`}>
               {neatMode ? 'auto_awesome' : 'scatter_plot'}
             </span>
             <span className="hidden sm:inline">

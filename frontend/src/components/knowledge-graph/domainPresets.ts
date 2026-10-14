@@ -42,7 +42,7 @@ export const DOMAIN_PRESETS: Record<string, DomainPreset> = {
       Club: { color: '#39ff14', icon: 'groups', description: 'Student technical society or extracurricular club' },
       Incident: { color: '#ff4c4c', icon: 'warning', description: 'Mass absence, proxy bunk event, or behavioral escalation' },
     },
-    edgeTypes: ['SUPERVISES', 'BUNKS_WITH', 'PEER_OF', 'ENROLLED_IN', 'INVOLVED_IN', 'AFFILIATED_WITH', 'TAUGHT_BY', 'MENTORS'],
+    edgeTypes: ['SUPERVISES', 'BUNKS_WITH', 'STUDIES_WITH', 'SITS_WITH', 'PROJECT_TEAM', 'PEER_OF', 'TEACHER_OBSERVED', 'ENROLLED_IN', 'INVOLVED_IN', 'AFFILIATED_WITH', 'TAUGHT_BY', 'MENTORS'],
     nodes: [
       { id: 'sec-cs3b', label: 'Section CS-3B', type: 'Classroom', community: 1, pagerank: 0.082, properties: { department: 'Computer Science', capacity: 60, room: 'LH-302', term: 'Sem 4' } },
       { id: 'fac-raghav', label: 'Prof. Raghav Sharma', type: 'Faculty', community: 1, pagerank: 0.076, properties: { designation: 'Class Teacher', department: 'AIML & Systems', cabin: 'B-204' } },

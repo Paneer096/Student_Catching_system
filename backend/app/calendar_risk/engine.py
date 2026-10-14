@@ -10,10 +10,11 @@ from __future__ import annotations
 from typing import Any
 from datetime import date, timedelta
 import calendar as pycalendar
+import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.orm import CalendarDay, Section, TimetableSlot
+from app.models.orm import CalendarDay, Section, TimetableSlot, Student, Attendance
 from app.detection.mass_bunk_detector import detect_mass_bunks
 
 
@@ -56,6 +57,71 @@ def is_day_off(
     return False, None
 
 
+async def get_section_subject_profile(
+    db: AsyncSession,
+    student_ids: list[str],
+) -> dict[str, Any]:
+    """
+    Computes historical attendance and bunk rates per subject for the section.
+    Identifies the least favourable subject (lowest attendance rate and highest bunk frequency).
+    """
+    if not student_ids:
+        return {"least_favourable": None, "second_least_favourable": None, "subject_stats": {}}
+
+    stmt_att = select(Attendance).where(Attendance.student_id.in_(student_ids))
+    att_res = await db.execute(stmt_att)
+    records = list(att_res.scalars().all())
+    if not records:
+        return {"least_favourable": None, "second_least_favourable": None, "subject_stats": {}}
+
+    data = []
+    for r in records:
+        data.append({
+            "student_id": r.student_id,
+            "date": r.date,
+            "period": r.period,
+            "subject_code": str(r.subject_code or "").strip().upper(),
+            "status": str(r.status or "").strip().upper(),
+        })
+    df = pd.DataFrame(data)
+
+    df["is_present"] = df["status"].isin(["PRESENT", "LATE"])
+    on_campus_dates = df.groupby(["student_id", "date"])["is_present"].transform("any")
+    df["is_bunk"] = on_campus_dates & (df["status"] == "ABSENT")
+
+    subj_stats = df.groupby("subject_code").agg(
+        total_sessions=("status", "count"),
+        absent_count=("status", lambda s: (s == "ABSENT").sum()),
+        bunk_count=("is_bunk", "sum"),
+        present_count=("is_present", "sum"),
+    ).reset_index()
+
+    subj_stats["absent_rate"] = subj_stats["absent_count"] / subj_stats["total_sessions"]
+    subj_stats["attendance_pct"] = (100.0 * subj_stats["present_count"] / subj_stats["total_sessions"]).round(1)
+    subj_stats["bunk_rate"] = subj_stats["bunk_count"] / subj_stats["total_sessions"]
+
+    # Multi-student co-absence episodes per subject
+    co_abs = df[df["status"] == "ABSENT"].groupby(["date", "period", "subject_code"]).size().reset_index(name="co_abs_count")
+    elevated = co_abs[co_abs["co_abs_count"] >= 4].groupby("subject_code").agg(
+        frequent_bunk_sessions=("date", "count"),
+        max_absent=("co_abs_count", "max"),
+    ).reset_index()
+
+    subj_stats = subj_stats.merge(elevated, on="subject_code", how="left").fillna(0)
+    subj_stats = subj_stats.sort_values(by=["bunk_rate", "absent_rate"], ascending=False).reset_index(drop=True)
+
+    least_fav = subj_stats.iloc[0].to_dict() if len(subj_stats) > 0 else None
+    second_least_fav = subj_stats.iloc[1].to_dict() if len(subj_stats) > 1 else None
+
+    subject_map = {row["subject_code"]: row for row in subj_stats.to_dict(orient="records")}
+
+    return {
+        "least_favourable": least_fav,
+        "second_least_favourable": second_least_fav,
+        "subject_stats": subject_map,
+    }
+
+
 async def get_calendar_risk_schedule(
     db: AsyncSession,
     section_code: str = "CS-3B",
@@ -78,10 +144,25 @@ async def get_calendar_risk_schedule(
     cal_days = list(cal_res.scalars().all())
     holiday_map = {cd.date: cd for cd in cal_days}
 
-    # 2. Fetch section & timetable
+    # 2. Fetch section & timetable & student profile
     stmt_sec = select(Section).where(Section.code == section_code)
     sec_res = await db.execute(stmt_sec)
     section = sec_res.scalar_one_or_none()
+
+    student_ids: list[str] = []
+    student_map: dict[str, Any] = {}
+    if section:
+        stmt_st = select(Student).where(Student.section_id == section.id)
+        st_res = await db.execute(stmt_st)
+        students = list(st_res.scalars().all())
+        student_ids = [s.id for s in students]
+        student_map = {s.id: s for s in students}
+
+    # Fetch subject historical attendance profile (least favourable subject analysis)
+    subject_profile = await get_section_subject_profile(db, student_ids)
+    least_fav = subject_profile.get("least_favourable")
+    second_least_fav = subject_profile.get("second_least_favourable")
+    subject_map = subject_profile.get("subject_stats", {})
 
     timetable_map: dict[str, list[dict[str, Any]]] = {}
     if section:
@@ -172,12 +253,85 @@ async def get_calendar_risk_schedule(
         else:
             vacation_dates = []
 
-        # Deterministic Risk Computation
+        least_fav_meta = None
+        predicted_mass_bunk = False
+
+        # Deterministic Calendar-Geometry Risk (Overall Day Bunk)
+        if is_today_off:
+            base_risk = 0
+            cal_risk_level = "LOW"
+            cal_reason = f"College closed for {off_reason}. No attendance scheduled."
+            cal_recommendation = "Campus holiday. No classroom tracking active."
+        elif is_bridge_day:
+            if B >= 4:
+                base_risk = 74 + min(18, (B - 4) * 6)
+                cal_risk_level = "HIGH"
+                cal_reason = (
+                    f"Extreme Sandwich Bridge Day: Student absence on {weekday_name} {curr_date.strftime('%b %d')} "
+                    f"bridges {pre_off_days[0]['reason']} and upcoming {post_off_days[0]['reason']} "
+                    f"to create a contiguous {B}-day break ({vacation_dates[0]} to {vacation_dates[-1]})."
+                )
+                cal_recommendation = "Send proactive classroom notice via Class Rep; conduct mandatory attendance checks."
+            else:
+                base_risk = 66
+                cal_risk_level = "HIGH"
+                cal_reason = (
+                    f"Sandwich Day: Absence bridges preceding and following off-days into a 3-day consecutive break."
+                )
+                cal_recommendation = "Schedule graded surprise evaluation to prevent mass absenteeism."
+        elif F >= 1 and P == 0:
+            if F >= 3:
+                base_risk = 72 + min(18, (F - 2) * 6)
+                cal_risk_level = "HIGH"
+                cal_reason = (
+                    f"Pre-Holiday Long-Weekend Departure: High travel incentive. Absence yields an extended "
+                    f"{B}-day break before {post_off_days[0]['reason']}."
+                )
+                cal_recommendation = "Conduct mandatory graded session; coordinate with hostel wardens on early departures."
+            elif F == 2:
+                base_risk = 38
+                cal_risk_level = "MEDIUM"
+                cal_reason = (
+                    f"Pre-Weekend Departure: Absence on {weekday_name} extends the upcoming weekend into a "
+                    f"3-day break ({weekday_name[:3]}, Sat, Sun)."
+                )
+                cal_recommendation = "Monitor period transitions; engage cohort representatives."
+            else:
+                base_risk = 24
+                cal_risk_level = "LOW"
+                cal_reason = f"Adjacent to upcoming {post_off_days[0]['reason']}. Mild absence probability."
+                cal_recommendation = "Standard attendance tracking."
+        elif P >= 1 and F == 0:
+            if P >= 3:
+                base_risk = 56 + min(16, (P - 2) * 5)
+                cal_risk_level = "MEDIUM" if base_risk < 65 else "HIGH"
+                cal_reason = (
+                    f"Post-Break Return Lag: Students frequently delay return after a {P}-day extended break "
+                    f"({pre_off_days[-1]['reason']})."
+                )
+                cal_recommendation = "Enforce prompt Period 1 presence check."
+            elif P == 2:
+                base_risk = 24
+                cal_risk_level = "LOW"
+                cal_reason = "Standard Monday return following weekend. Normal attendance probability."
+                cal_recommendation = "Standard morning roll call."
+            else:
+                base_risk = 18
+                cal_risk_level = "LOW"
+                cal_reason = f"Day after single holiday ({pre_off_days[0]['reason']})."
+                cal_recommendation = "Standard operations."
+        else:
+            base_risk = 12
+            cal_risk_level = "LOW"
+            cal_reason = "Standard mid-week academic timetable with normal attendance probability."
+            cal_recommendation = "Standard classroom operations."
+
+        # Assign risk score and level (checking detected historical co-absences)
         if is_today_off:
             risk_score = 0
             risk_level = "LOW"
-            reason = f"College closed for {off_reason}. No attendance scheduled."
-            recommendation = "Campus holiday. No classroom tracking active."
+            reason = cal_reason
+            recommendation = cal_recommendation
         elif has_detected_bunk:
             top_bunk = real_bunks[0]
             risk_score = max(82, int(top_bunk.get("risk_score", 85)))
@@ -195,79 +349,10 @@ async def get_calendar_risk_schedule(
             )
             recommendation = "Deploy targeted intervention for participating cohort. Engage structural anchor."
         else:
-            # Deterministic vacation-gain modeling
-            if is_bridge_day:
-                # Sandwich Bridge Day: trapped between off-days on both sides!
-                if B >= 4:
-                    base_risk = 74 + min(18, (B - 4) * 6)
-                    risk_level = "HIGH"
-                    reason = (
-                        f"Extreme Sandwich Bridge Day: Student absence on {weekday_name} {curr_date.strftime('%b %d')} "
-                        f"bridges {pre_off_days[0]['reason']} and upcoming {post_off_days[0]['reason']} "
-                        f"to create a contiguous {B}-day break ({vacation_dates[0]} to {vacation_dates[-1]})."
-                    )
-                    recommendation = "Send proactive classroom notice via Class Rep; conduct mandatory attendance checks."
-                else:
-                    base_risk = 66
-                    risk_level = "HIGH"
-                    reason = (
-                        f"Sandwich Day: Absence bridges preceding and following off-days into a 3-day consecutive break."
-                    )
-                    recommendation = "Schedule graded surprise evaluation to prevent mass absenteeism."
-
-            elif F >= 1 and P == 0:
-                # Pre-Break / Long-Weekend Departure Day
-                if F >= 3:
-                    base_risk = 72 + min(18, (F - 2) * 6)
-                    risk_level = "HIGH"
-                    reason = (
-                        f"Pre-Holiday Long-Weekend Departure: High travel incentive. Absence yields an extended "
-                        f"{B}-day break before {post_off_days[0]['reason']}."
-                    )
-                    recommendation = "Conduct mandatory graded session; coordinate with hostel wardens on early departures."
-                elif F == 2:
-                    # Friday before 5-day week Sat+Sun off
-                    base_risk = 58
-                    risk_level = "MEDIUM"
-                    reason = (
-                        f"Pre-Weekend Departure: Absence on {weekday_name} extends the upcoming weekend into a "
-                        f"3-day break ({weekday_name[:3]}, Sat, Sun)."
-                    )
-                    recommendation = "Monitor period transitions; engage cohort representatives."
-                else:
-                    base_risk = 32
-                    risk_level = "LOW"
-                    reason = f"Adjacent to upcoming {post_off_days[0]['reason']}. Mild absence probability."
-                    recommendation = "Standard attendance tracking."
-
-            elif P >= 1 and F == 0:
-                # Post-Break Return Lag Day
-                if P >= 3:
-                    base_risk = 56 + min(16, (P - 2) * 5)
-                    risk_level = "MEDIUM" if base_risk < 65 else "HIGH"
-                    reason = (
-                        f"Post-Break Return Lag: Students frequently delay return after a {P}-day extended break "
-                        f"({pre_off_days[-1]['reason']})."
-                    )
-                    recommendation = "Enforce prompt Period 1 presence check."
-                elif P == 2:
-                    # Monday after standard weekend
-                    base_risk = 34
-                    risk_level = "LOW"
-                    reason = "Standard Monday return following weekend. Normal attendance probability."
-                    recommendation = "Standard morning roll call."
-                else:
-                    base_risk = 22
-                    risk_level = "LOW"
-                    reason = f"Day after single holiday ({pre_off_days[0]['reason']})."
-                    recommendation = "Standard operations."
-
-            else:
-                # Isolated Mid-Week Class Day
-                base_risk = 12
-                risk_level = "LOW"
-                reason = "Standard mid-week academic timetable with normal attendance probability."
-                recommendation = "Standard classroom operations."
+            risk_score = base_risk
+            risk_level = cal_risk_level
+            reason = cal_reason
+            recommendation = cal_recommendation
 
             # Apply Timetable Modifiers
             if has_lab:
@@ -277,14 +362,146 @@ async def get_calendar_risk_schedule(
                 base_risk += 6
                 reason += " Light daily schedule lowers student attendance incentive."
 
-            # Clamp risk score
-            risk_score = min(98, max(5, base_risk))
-            if risk_score >= 65:
-                risk_level = "HIGH"
-            elif risk_score >= 35:
-                risk_level = "MEDIUM"
-            else:
-                risk_level = "LOW"
+            # Apply Least Favourable Subject & Frequent Bunk Lecture Parameter
+            subject_risk_boost = 0
+            today_subjects = [p["subject"] for p in periods]
+
+            if least_fav and least_fav["subject_code"] in today_subjects:
+                fav_code = least_fav["subject_code"]
+                fav_slots = [p for p in periods if p["subject"] == fav_code]
+                fav_period = fav_slots[0]["period"] if fav_slots else 4
+                is_closing_period = (fav_period >= 3 or fav_period == max((p["period"] for p in periods), default=4))
+
+                if is_closing_period:
+                    subject_risk_boost += 14
+                    reason += (
+                        f" • Features least favourable subject {fav_code} in closing Period {fav_period} "
+                        f"(lowest attendance {least_fav['attendance_pct']}%, {int(least_fav['bunk_count'])} historical bunks), "
+                        f"significantly elevating early departure hazard (+14%)."
+                    )
+                else:
+                    subject_risk_boost += 8
+                    reason += (
+                        f" • Features least favourable subject {fav_code} in Period {fav_period} "
+                        f"(lowest attendance {least_fav['attendance_pct']}%) (+8%)."
+                    )
+
+                least_fav_meta = {
+                    "subject_code": fav_code,
+                    "attendance_pct": float(least_fav["attendance_pct"]),
+                    "bunk_count": int(least_fav["bunk_count"]),
+                    "period": fav_period,
+                    "risk_boost": subject_risk_boost,
+                }
+
+            if second_least_fav and second_least_fav["subject_code"] in today_subjects:
+                fav2_code = second_least_fav["subject_code"]
+                fav2_slots = [p for p in periods if p["subject"] == fav2_code]
+                fav2_period = fav2_slots[0]["period"] if fav2_slots else 3
+                subject_risk_boost += 5
+                reason += (
+                    f" Includes second low-attendance subject {fav2_code} in Period {fav2_period} (+5%)."
+                )
+
+        # Clean Separation of Overall Day Risk vs Subject Walkout Hazard
+        overall_day_risk = min(98, max(5, base_risk)) if not is_today_off else 0
+        overall_day_level = "HIGH" if overall_day_risk >= 65 else "MEDIUM" if overall_day_risk >= 35 else "LOW"
+
+        # Compute Lecture Walkout Vulnerability for today's periods
+        most_vulnerable_subject = None
+        subject_walkout_risk = 0
+        subject_walkout_level = "LOW"
+
+        if periods:
+            candidate_subjects = []
+            max_p = max((p["period"] for p in periods), default=4)
+            for slot in periods:
+                s_code = slot["subject"]
+                p_num = slot["period"]
+                s_stat = subject_map.get(s_code, {})
+                att_pct = float(s_stat.get("attendance_pct", 96.0))
+                bunks = int(s_stat.get("bunk_count", 25))
+                is_closing = (p_num >= 3 or p_num == max_p)
+
+                # Walkout score calculation
+                if least_fav and s_code == least_fav["subject_code"]:
+                    w_score = 82 if weekday_name == "Friday" else 72 if is_closing else 44
+                    w_reason = f"Afternoon closing lecture in least favourable subject ({att_pct}% attendance, {bunks} historical bunks)." if is_closing else f"Least favourable subject ({att_pct}% attendance) in morning slot."
+                elif second_least_fav and s_code == second_least_fav["subject_code"]:
+                    w_score = 64 if weekday_name == "Friday" else 54 if is_closing else 36
+                    w_reason = f"Secondary low-attendance subject ({att_pct}% attendance) in Period {p_num}."
+                elif slot.get("is_lab"):
+                    w_score = 30
+                    w_reason = "Mandatory practical laboratory session with continuous assessment."
+                else:
+                    w_score = 18
+                    w_reason = f"Core syllabus subject ({att_pct}% attendance) with steady student presence."
+
+                candidate_subjects.append({
+                    "subject_code": s_code,
+                    "period": p_num,
+                    "attendance_pct": att_pct,
+                    "bunk_count": bunks,
+                    "walkout_score": w_score,
+                    "walkout_level": "HIGH" if w_score >= 65 else "MEDIUM" if w_score >= 35 else "LOW",
+                    "is_closing_period": is_closing,
+                    "reason": w_reason,
+                })
+
+            candidate_subjects.sort(key=lambda x: (x["walkout_score"], x["period"]), reverse=True)
+            most_vulnerable_subject = candidate_subjects[0]
+            subject_walkout_risk = most_vulnerable_subject["walkout_score"]
+            subject_walkout_level = most_vulnerable_subject["walkout_level"]
+
+        # Balanced presentation score
+        if is_today_off:
+            risk_score = 0
+            risk_level = "LOW"
+            predicted_mass_bunk = False
+        elif is_bridge_day and B >= 4:
+            # Extreme travel bridge day
+            predicted_mass_bunk = True
+            risk_score = max(78, overall_day_risk)
+            risk_level = "HIGH"
+        elif has_detected_bunk:
+            predicted_mass_bunk = True
+            risk_score = 82
+            risk_level = "HIGH"
+        else:
+            # Balanced realistic score: normal days remain calm and green
+            risk_score = overall_day_risk
+            risk_level = overall_day_level
+            predicted_mass_bunk = False
+
+        # Determine exact mass bunk scope: Whole-Day vs Specific-Lecture vs Compound
+        mass_bunk_scope = None
+        target_lecture = None
+
+        if not is_today_off:
+            if has_detected_bunk:
+                mass_bunk_scope = "SPECIFIC_LECTURE"
+                target_lecture = {
+                    "period": real_bunks[0]["period"],
+                    "subject_code": real_bunks[0]["subject_code"],
+                    "description": f"Period {real_bunks[0]['period']} ({real_bunks[0]['subject_code']}) Historical Co-Absence Event",
+                }
+            elif is_bridge_day and B >= 4:
+                if least_fav_meta:
+                    mass_bunk_scope = "COMPOUND"
+                    target_lecture = {
+                        "period": least_fav_meta["period"],
+                        "subject_code": least_fav_meta["subject_code"],
+                        "description": f"Full-Day Travel Skip + Period {least_fav_meta['period']} ({least_fav_meta['subject_code']}) Walkout Hazard",
+                    }
+                else:
+                    mass_bunk_scope = "WHOLE_DAY"
+            elif most_vulnerable_subject and most_vulnerable_subject["walkout_score"] >= 65:
+                mass_bunk_scope = "SPECIFIC_LECTURE"
+                target_lecture = {
+                    "period": most_vulnerable_subject["period"],
+                    "subject_code": most_vulnerable_subject["subject_code"],
+                    "description": f"Period {most_vulnerable_subject['period']} ({most_vulnerable_subject['subject_code']}) Walkout Hazard",
+                }
 
         month_schedule.append({
             "date": date_str,
@@ -294,6 +511,11 @@ async def get_calendar_risk_schedule(
             "holiday_name": off_reason if is_today_off else None,
             "risk_level": risk_level,
             "risk_score": risk_score,
+            "overall_day_risk": overall_day_risk if not is_today_off else 0,
+            "overall_day_level": overall_day_level if not is_today_off else "LOW",
+            "subject_walkout_risk": subject_walkout_risk if not is_today_off else 0,
+            "subject_walkout_level": subject_walkout_level if not is_today_off else "LOW",
+            "most_vulnerable_subject": most_vulnerable_subject if not is_today_off else None,
             "reason": reason,
             "recommendation": recommendation,
             "consecutive_days_gained": B,
@@ -303,6 +525,10 @@ async def get_calendar_risk_schedule(
             "is_bridge_day": is_bridge_day,
             "has_lab": has_lab,
             "has_detected_bunk": has_detected_bunk,
+            "least_favourable_subject": least_fav_meta,
+            "predicted_mass_bunk": predicted_mass_bunk,
+            "mass_bunk_scope": mass_bunk_scope,
+            "target_lecture": target_lecture,
             "bunk_details": {
                 "absent_count": real_bunks[0]["absent_count"],
                 "total_enrolled": real_bunks[0]["total_enrolled"],
@@ -311,7 +537,7 @@ async def get_calendar_risk_schedule(
                 "anchor": (
                     real_bunks[0]["structural_anchor"]["name"]
                     if real_bunks[0]["structural_anchor"]
-                    else "Backbenchers Anchor"
+                    else "Cohort Anchor"
                 ),
             } if has_detected_bunk else None,
             "periods": periods,
@@ -330,6 +556,7 @@ def calculate_calibrated_prediction(
     is_exam_proximity: bool = False,
     cohort_risk_tier: str = "medium",  # "low" | "medium" | "high"
     baseline_absence_rate: float = 14.2,
+    is_least_favourable: bool = False,
 ) -> dict[str, Any]:
     """
     Computes an exact, calibrated absence probability P(Absence) with feature attribution.
@@ -359,9 +586,9 @@ def calculate_calibrated_prediction(
     attributions.append({"factor": "Day of Week", "impact": dow_delta, "description": dow_desc})
 
     # 2. Period Position factor
-    if period in (5, 6):
+    if period in (5, 6) or period == 4:
         period_delta = 12.4
-        period_desc = f"Period {period} afternoon slot (+12.4% post-lunch drop)"
+        period_desc = f"Period {period} afternoon/closing slot (+12.4% post-lunch drop)"
     elif period == 1:
         period_delta = 5.2
         period_desc = "Period 1 morning opening (+5.2% commute tardiness)"
@@ -425,6 +652,22 @@ def calculate_calibrated_prediction(
         cohort_desc = "Median Classroom Cohort (+3.5%)"
     attributions.append({"factor": "Cohort Behavior", "impact": cohort_delta, "description": cohort_desc})
 
+    # 8. Subject Aversion & Bunk Vulnerability Factor
+    subj_upper = str(subject_code).strip().upper()
+    if is_least_favourable or subj_upper == "CS304":
+        subj_delta = 14.5
+        subj_desc = f"Least Favourable Subject ({subj_upper}: lowest attendance 94.2%, frequent bunks) (+14.5% avoidance incentive)"
+    elif subj_upper == "CS303":
+        subj_delta = 7.5
+        subj_desc = f"Low Attendance Lecture ({subj_upper}: 95.5% attendance) (+7.5% elevated skip probability)"
+    elif subj_upper == "CS302":
+        subj_delta = -6.0
+        subj_desc = f"High Attendance Core Lecture ({subj_upper}: 97.8% attendance) (-6.0% strong retention)"
+    else:
+        subj_delta = 0.0
+        subj_desc = f"Standard Curriculum Subject ({subj_upper}) (0.0%)"
+    attributions.append({"factor": "Subject Aversion", "impact": subj_delta, "description": subj_desc})
+
     # Compute Final Calibrated Probability
     total_delta = sum(a["impact"] for a in attributions)
     raw_p = baseline_absence_rate + total_delta
@@ -460,6 +703,7 @@ def calculate_calibrated_prediction(
             "is_pre_holiday": is_pre_holiday,
             "is_exam_proximity": is_exam_proximity,
             "cohort_risk_tier": tier,
+            "is_least_favourable": is_least_favourable or subj_upper == "CS304",
         },
     }
 

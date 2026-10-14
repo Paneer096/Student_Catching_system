@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { CanvasNode, CanvasEdge } from './KnowledgeGraphCanvas';
+import { ManualConnectionItem } from '../../api/client';
 
 export interface OperationsSidebarProps {
   nodes: CanvasNode[];
@@ -31,7 +32,11 @@ export interface OperationsSidebarProps {
   pathError: string | null;
   // Editor
   onInjectNode: (node: { id: string; label: string; type: string; properties?: Record<string, any> }) => void;
-  onInjectEdge: (edge: { source: string; target: string; type: string; weight?: number }) => void;
+  onInjectEdge: (edge: { source: string; target: string; type: string; weight?: number; notes?: string }) => void;
+  // Manual Teacher Connections
+  manualConnections?: ManualConnectionItem[];
+  onDeleteManualConnection?: (connectionId: string) => void;
+  onOpenConnectModal?: () => void;
   // Timeline
   timelineRange: { min: number; max: number; current: number } | null;
   onTimelineChange: (val: number) => void;
@@ -84,6 +89,9 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
   pathError,
   onInjectNode,
   onInjectEdge,
+  manualConnections = [],
+  onDeleteManualConnection,
+  onOpenConnectModal,
   timelineRange,
   onTimelineChange,
   isTimelinePlaying,
@@ -127,8 +135,9 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
 
   const [newEdgeSource, setNewEdgeSource] = useState('');
   const [newEdgeTarget, setNewEdgeTarget] = useState('');
-  const [newEdgeType, setNewEdgeType] = useState<string>(() => edgeTypesList[0] || 'CONNECTED_TO');
+  const [newEdgeType, setNewEdgeType] = useState<string>('STUDIES_WITH');
   const [newEdgeWeight, setNewEdgeWeight] = useState('1.0');
+  const [newEdgeNotes, setNewEdgeNotes] = useState('');
 
   // Node type counts
   const nodeTypeCounts = useMemo(() => {
@@ -166,9 +175,11 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
       target: newEdgeTarget.trim(),
       type: newEdgeType,
       weight: parseFloat(newEdgeWeight) || 1.0,
+      notes: newEdgeNotes.trim() || undefined,
     });
     setNewEdgeSource('');
     setNewEdgeTarget('');
+    setNewEdgeNotes('');
   };
 
   if (isCollapsed) {
@@ -798,22 +809,36 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
 
             <div className="border-t border-white/10" />
 
-            {/* Inject Edge */}
+            {/* Inject Edge / Manual Connection */}
             <form onSubmit={handleCreateEdge} className="space-y-2">
-              <div className="text-[11px] font-mono text-gray-400 font-semibold uppercase tracking-wider">
-                Inject Edge (Relationship)
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-mono text-cyan-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px]">add_link</span>
+                  <span>Connect Students</span>
+                </div>
+                {onOpenConnectModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenConnectModal}
+                    className="text-[10px] text-cyan-300 hover:text-white underline font-mono flex items-center gap-0.5"
+                  >
+                    <span>Full Dialog</span>
+                    <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                  </button>
+                )}
               </div>
+
               <select
                 value={newEdgeSource}
                 onChange={(e) => setNewEdgeSource(e.target.value)}
                 className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
               >
                 <option value="" className="bg-gray-900 text-gray-400">
-                  -- Source Node --
+                  -- Source Student (A) --
                 </option>
                 {nodes.map((n) => (
-                  <option key={n.id} value={n.id} className="bg-gray-900 text-white">
-                    {n.label}
+                  <option key={n.id} value={n.roll_no || n.id} className="bg-gray-900 text-white">
+                    {n.label} ({n.roll_no || n.id})
                   </option>
                 ))}
               </select>
@@ -823,11 +848,11 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                 className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
               >
                 <option value="" className="bg-gray-900 text-gray-400">
-                  -- Target Node --
+                  -- Target Student (B) --
                 </option>
                 {nodes.map((n) => (
-                  <option key={n.id} value={n.id} className="bg-gray-900 text-white">
-                    {n.label}
+                  <option key={n.id} value={n.roll_no || n.id} className="bg-gray-900 text-white">
+                    {n.label} ({n.roll_no || n.id})
                   </option>
                 ))}
               </select>
@@ -836,29 +861,81 @@ export const OperationsSidebar: React.FC<OperationsSidebarProps> = ({
                 onChange={(e) => setNewEdgeType(e.target.value)}
                 className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
               >
-                {edgeTypesList.map((et) => (
-                  <option key={et} value={et} className="bg-gray-900 text-white">
-                    {et}
-                  </option>
-                ))}
+                <option value="STUDIES_WITH" className="bg-gray-900 text-white">STUDIES_WITH (Study Partner)</option>
+                <option value="SITS_WITH" className="bg-gray-900 text-white">SITS_WITH (Desk / Seating Tie)</option>
+                <option value="PROJECT_TEAM" className="bg-gray-900 text-white">PROJECT_TEAM (Project Partner)</option>
+                <option value="PEER_OF" className="bg-gray-900 text-white">PEER_OF (Social Peer)</option>
+                <option value="TEACHER_OBSERVED" className="bg-gray-900 text-white">TEACHER_OBSERVED (Faculty Observation)</option>
               </select>
               <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                max="10"
-                placeholder="Weight (default 1.0)"
-                value={newEdgeWeight}
-                onChange={(e) => setNewEdgeWeight(e.target.value)}
-                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white"
+                type="text"
+                placeholder="Observation Notes (e.g. Lab partner)"
+                value={newEdgeNotes}
+                onChange={(e) => setNewEdgeNotes(e.target.value)}
+                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white placeholder-gray-500"
               />
-              <button
-                type="submit"
-                className="w-full py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold hover:bg-emerald-500/30 transition-colors text-xs"
-              >
-                + Connect Relationship
-              </button>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="5"
+                  placeholder="Weight (1.0)"
+                  value={newEdgeWeight}
+                  onChange={(e) => setNewEdgeWeight(e.target.value)}
+                  className="w-24 bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white"
+                />
+                <button
+                  type="submit"
+                  className="flex-1 py-1.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold hover:bg-cyan-500/30 transition-colors text-xs flex items-center justify-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">link</span>
+                  <span>Connect</span>
+                </button>
+              </div>
             </form>
+
+            {/* Active Teacher Connections List */}
+            {manualConnections && manualConnections.length > 0 && (
+              <div className="pt-2 border-t border-white/10 space-y-1.5">
+                <div className="text-[11px] font-mono text-gray-400 font-semibold uppercase tracking-wider flex items-center justify-between">
+                  <span>Teacher Ties</span>
+                  <span className="text-[10px] text-cyan-400 font-bold px-1.5 py-0.2 rounded bg-cyan-500/10">
+                    {manualConnections.length} Active
+                  </span>
+                </div>
+                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 font-mono text-[11px]">
+                  {manualConnections.map((mc) => (
+                    <div
+                      key={mc.id}
+                      className="p-1.5 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between group hover:bg-white/[0.06] transition-colors"
+                    >
+                      <div className="overflow-hidden">
+                        <div className="text-white text-[11px] truncate flex items-center gap-1">
+                          <span className="text-cyan-300 font-bold">{mc.student_a}</span>
+                          <span className="text-gray-500">↔</span>
+                          <span className="text-cyan-300 font-bold">{mc.student_b}</span>
+                        </div>
+                        <div className="text-[9px] text-gray-400 flex items-center gap-1">
+                          <span className="text-purple-300">{mc.connection_type}</span>
+                          {mc.notes && <span className="text-gray-500 truncate max-w-[120px]">· {mc.notes}</span>}
+                        </div>
+                      </div>
+                      {onDeleteManualConnection && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteManualConnection(mc.id)}
+                          className="p-1 rounded text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 ml-1"
+                          title="Delete Connection"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">delete</span>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
